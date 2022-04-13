@@ -267,7 +267,7 @@ class PhaseFieldCrystal2D:
 
 
     # minimize with constant mu
-    def minimize_mu(self, dt, cycle=31, verbose=True):
+    def minimize_mu(self, dt, cycle=31, verbose=True, display_precision=5):
         i = 0
         t = 0
         if len(self.history['t']) > 0:
@@ -275,6 +275,8 @@ class PhaseFieldCrystal2D:
 
         self._prepare_simulation(dt)
         self.running = True
+
+        dp = display_precision
 
         if verbose:
             self.summarize()
@@ -299,7 +301,10 @@ class PhaseFieldCrystal2D:
                 with self.lock:
                     if not self.running:
                         return
-                    sys.stdout.write(f'\r[pfcim] t={t:.4f} | psi_bar={psi0:.5f} | Omega={Omega:.5f} | omega={Omega/self.Volume:.7f}| diff={ord_param:.5f}    ')
+                    sys.stdout.write(
+                        f'\r[pfcim] t={t:.{dp}f} | psi_bar={psi0:.{dp}f} | Omega={Omega:.{dp}f} | ' +\
+                        f'omega={Omega/self.Volume:.{dp+2}f} | diff={ord_param:.{dp}f}       '
+                    )
 
                 self.history['Omega'] = np.append(self.history['Omega'], Omega)
                 self.history['t'] = np.append(self.history['t'], t)
@@ -309,31 +314,6 @@ class PhaseFieldCrystal2D:
                 i = 0
 
 
-
-
-        print()
-
-    def minimize_mu_dangerous(self, dt, cycle=31, verbose=True, t0=0):
-        i = 0
-        t = t0
-
-        self._prepare_simulation(dt)
-        while True:
-            #self._evolve_noise(dt)
-            self._evolve_x()
-            self._evolve_k()
-            self._evolve_x()
-            i += 1
-            t += dt
-            if i >= cycle:
-                #psi0 = self.calc_N_tot() / self.Volume
-                #omega = self.calc_grand_potential_density()
-                #Omega = np.sum(omega) * self.dx * self.dy
-                #ord_param = self.calc_ord_param()
-
-                i = 0
-                #sys.stdout.write(f'\r[pfc] t={t:.4f} | psi_bar={psi0:.5f} | Omega={Omega:.5f} | diff={ord_param:.5f}    ')
-                sys.stdout.write(f'\r[pfc] t={t:.4f}')
         print()
 
     # minimize with nonlocal conserved dynamics
@@ -364,11 +344,11 @@ class PhaseFieldCrystal2D:
                 sys.stdout.write(f'\r[pfc] t={t} | psi_bar={psi0} | Omega={Omega} | diff={ord_param}    ')
         print()
 
-    def run_background(self, func, args):
+    def run_background(self, func, args, kwargs=dict()):
         if self.lock is None:
             self.new_lock()
         
-        thread = threading.Thread(target=func, args=args, daemon=False)
+        thread = threading.Thread(target=func, args=args, kwargs=kwargs, daemon=False)
         thread.start()
 
         return self.lock, thread

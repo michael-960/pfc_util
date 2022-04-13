@@ -5,17 +5,19 @@ from pfc_util import pfc_im
 from matplotlib import pyplot as plt
 import numpy as np
 import sys
-import os
 import subprocess
-import readline
 from util import common as cmn
 import os
 import re
 import readline
-
+import numexpr
 from .prompt import Command, CommandExecutionError, SimplePrompt
-
 import time
+
+_version = '2.5'
+_date = '2022/04/13'
+_author = 'michael'
+
 
 def overrides(interface_class):
     def overrider(method):
@@ -29,6 +31,7 @@ def overrides(interface_class):
 class ProfileEditorPrompt(SimplePrompt):
     def __init__(self):
         super().__init__()
+        self.prefix = '[PIPE]>> '
         self.add_command(CommandHelp())
 
         self.add_command(CommandLs())
@@ -41,6 +44,7 @@ class ProfileEditorPrompt(SimplePrompt):
         self.add_command(CommandInfo())
 
         self.add_command(CommandExtend())
+        self.add_command(CommandCrop())
         self.add_command(CommandChangeRes())
         self.add_command(CommandCopy())
         self.add_command(CommandDelete())
@@ -57,10 +61,37 @@ class ProfileEditorPrompt(SimplePrompt):
         self.add_command(CommandExit())
 
         self.add_command(CommandHistory())
+        self.add_command(CommandIPython())
         self.add_command(CommandResetHistory())
         self.add_command(CommandEvolve())
 
         self.memory_models = dict()
+
+        try:
+            readline.read_history_file('.history')
+        except FileNotFoundError as e:
+            self.output('new command history file initialized in ./.history')
+
+        readline.set_history_length(256)
+
+    @overrides(SimplePrompt)
+    def put_banner(self):
+        self.output('PFC Interactive Profile Editor (PIPE)')
+        self.output(f'version: {_version}')
+        self.output(f'last updated on {_date} by {_author}')
+        print()
+    
+    @overrides(SimplePrompt)
+    def output(self, s, level=0):
+        color = ''
+        if level == 0:
+            color = cmn.bcolors.OKCYAN
+        elif level == 1:
+            color = cmn.bcolors.WARNING
+        elif level == 2:
+            color = cmn.bcolors.FAIL
+        print(f'{cmn.bcolors.BOLD}{color}[PIPE]{cmn.bcolors.ENDC} {s}')
+
 
     def get(self, varname):
         try:
@@ -69,7 +100,36 @@ class ProfileEditorPrompt(SimplePrompt):
             s = f'model {varname} not found'
             raise CommandExecutionError(s)
 
+    def put(self, varname, model):
+        self.check_varname(varname)
+        self.memory_models[varname] = model
 
+    @overrides(SimplePrompt)
+    def _on_exit(self):
+        readline.write_history_file('.history')
+        return
+
+
+    def check_varname(self, varname: str):
+        blacklist = [
+            varname.find('-') != -1,
+            varname.find('+') != -1,
+            varname.find('*') != -1,
+            varname.find('/') != -1,
+            varname.find('.') != -1,
+            varname.find('!') != -1,
+            varname.find('@') != -1,
+            varname.find('(') != -1,
+            varname.find(')') != -1,
+            varname.find('#') != -1,
+            varname.find('^') != -1,
+            varname.find('&') != -1,
+            varname.find('$') != -1,
+            varname.find('%') != -1,
+            varname[0].isnumeric()
+        ]
+        if any(blacklist):
+            raise CommandExecutionError(f'invalid variable name: {varname}')
 
 
 class CommandHelp(Command):
@@ -86,13 +146,14 @@ class CommandHelp(Command):
     def complete(self, prompt: SimplePrompt, args: list):
         return [] 
 
+
 class CommandLs(Command):
     def __init__(self):
         super().__init__('ls')
 
     @overrides(Command)
     def execute(self, prompt: ProfileEditorPrompt, args: list):
-        prompt.output('listing files')
+        #prompt.output('listing files')
         p = subprocess.run(['ls'] + args)
         print()
         
@@ -139,7 +200,7 @@ class CommandLoad(Command):
         model = pfc_im.PhaseFieldCrystal2D(1, 1, 1, 1, verbose=False)
         model.load_profile_from_file(saved, verbose=False)
 
-        prompt.memory_models[varname] = model
+        prompt.put(varname, model)
         prompt.output(f'loaded file {filename} to model {varname}')
         print()
 
@@ -151,7 +212,6 @@ class CommandLoad(Command):
         if len(args) == 2:
             return _match_models(prompt, args[-1])
         return [] 
-
 
 
 class CommandSave(Command):
@@ -179,6 +239,7 @@ class CommandSave(Command):
         if len(args) == 2:
             return super().complete(prompt, args)
         return [] 
+
 
 class CommandView(Command):
     def __init__(self):
@@ -215,9 +276,10 @@ class CommandView(Command):
         if len(args) == 1:
             return _match_models(prompt, args[-1])
         if len(args) == 2:
-            return ['--lazy']
+            return ['--lazy ']
 
         return [] 
+
 
 class CommandInfo(Command):
     def __init__(self):
@@ -235,14 +297,13 @@ class CommandInfo(Command):
         prompt.output('invoking pfc model methods')
         model.summarize()
         print()
-
-
                 
     @overrides(Command)
     def complete(self, prompt: ProfileEditorPrompt, args: list):
         if len(args) == 1:
             return _match_models(prompt, args[-1])
         return [] 
+
 
 class CommandExtend(Command):
     def __init__(self):
@@ -270,7 +331,7 @@ class CommandExtend(Command):
         model2.set_dimensions(model1.Lx*Mx, model1.Ly*My, model1.Nx*Mx, model1.Ny*My, verbose=False)
         model2.set_psi(psi2, verbose=False)
 
-        prompt.memory_models[var2] = model2
+        prompt.put(var2, model2)
         print()
 
                
@@ -279,6 +340,64 @@ class CommandExtend(Command):
         if len(args) == 1 or len(args) == 4:
             return _match_models(prompt, args[-1])
         return [] 
+
+
+class CommandCrop(Command):
+    def __init__(self):
+        super().__init__('crop')
+
+
+    @overrides(Command)
+    def execute(self, prompt: ProfileEditorPrompt, args: list):
+        if len(args) < 6:
+            raise CommandExecutionError('syntax: crop VAR1 ratio_x1 ratio_y1 ratio_x2 ratio_y2 VAR2')
+
+        var1 = args[0]
+        var2 = args[5]
+        try:
+            ratio_x1 = float(args[1])
+            ratio_y1 = float(args[2])
+            ratio_x2 = float(args[3])
+            ratio_y2 = float(args[4])
+
+            assert 0 <= ratio_x1 < ratio_x2 <= 1
+            assert 0 <= ratio_y1 < ratio_y2 <= 1
+            
+        except ValueError as e:
+            raise CommandExecutionError(e.args[-1])
+        except AssertionError as e:
+            raise CommandExecutionError('the ratios must satisfy the constraints ' +\
+                                        '0 <= ratio_x1 < ratio_x2 <= 1 and ' +\
+                                        '0 <= ratio_y1 < ratio_y2 <= 1')
+
+
+        extra = args[6:]
+
+        model1 = prompt.get(var1)
+        model2 = model1.copy(verbose=False)
+    
+
+        Nx2 = int(model1.Nx * (ratio_x2 - ratio_x1))
+        Ny2 = int(model1.Ny * (ratio_y2 - ratio_y1))
+        first_x = int(model1.Nx * ratio_x1)
+        first_y = int(model1.Nx * ratio_y1)
+
+        psi2 = model1.psi[first_x:first_x+Nx2, first_y:first_y+Ny2]
+
+        model2.set_dimensions(model1.Lx*(ratio_x2-ratio_x1), model1.Ly*(ratio_y2-ratio_y1), Nx2, Ny2, verbose=False)
+        model2.set_psi(psi2, verbose=False)
+        prompt.put(var2, model2)
+        print()
+
+               
+    @overrides(Command)
+    def complete(self, prompt: ProfileEditorPrompt, args: list):
+        if len(args) == 1 or len(args) == 6:
+            return _match_models(prompt, args[-1])
+        if 1 < len(args) < 6:
+            return ['0.125 ', '0.25 ', '0.375 ', '0.5 ', '0.625 ', '0.75 ', '0.875 ', '1']
+        return [] 
+
 
 class CommandChangeRes(Command):
     def __init__(self):
@@ -308,8 +427,7 @@ class CommandChangeRes(Command):
         model2.set_dimensions(model1.Lx, model1.Ly, Nx, Ny, verbose=False)
         model2.set_psi(psi2, verbose=False)
 
-        prompt.memory_models[var2] = model2
-        #model2.summarize()
+        prompt.put(var2, model2)
         print()
 
 
@@ -318,6 +436,7 @@ class CommandChangeRes(Command):
         if len(args) == 1 or len(args) == 4:
             return _match_models(prompt, args[-1])
         return [] 
+
 
 class CommandCopy(Command):
     def __init__(self):
@@ -334,7 +453,7 @@ class CommandCopy(Command):
         model1 = prompt.get(var1)
         model2 = model1.copy(verbose=False)
 
-        prompt.memory_models[var2] = model2
+        prompt.put(var2, model2)
         print()
 
 
@@ -343,6 +462,7 @@ class CommandCopy(Command):
         if len(args) == 1 or len(args) == 2:
             return _match_models(prompt, args[-1])
         return [] 
+
 
 class CommandDelete(Command):
     def __init__(self):
@@ -358,7 +478,6 @@ class CommandDelete(Command):
         if not var in prompt.memory_models:
             raise CommandExecutionError(f'{var} does not exist in memory')
 
-        
         try:
             del prompt.memory_models[var]
         except Exception:
@@ -372,6 +491,7 @@ class CommandDelete(Command):
         if len(args) == 1:
             return _match_models(prompt, args[-1])
         return [] 
+
 
 class CommandMove(Command):
     def __init__(self):
@@ -388,10 +508,8 @@ class CommandMove(Command):
         if not var1 in prompt.memory_models:
             raise CommandExecutionError(f'{var1} does not exist in memory')
 
-        
-        prompt.memory_models[var2] = prompt.get(var1)
+        prompt.put(var2, prompt.get(var1))
         del prompt.memory_models[var1]
-
 
         print()
 
@@ -401,9 +519,6 @@ class CommandMove(Command):
         if len(args) == 1 or len(args) == 2:
             return _match_models(prompt, args[-1])
         return [] 
-
-
-
 
 
 class CommandSetParam(Command):
@@ -430,7 +545,7 @@ class CommandSetParam(Command):
 
         model2.set_params(mu2, eps2, verbose=False)
 
-        prompt.memory_models[var2] = model2
+        prompt.put(var2, model2)
         print()
 
 
@@ -473,10 +588,9 @@ class CommandSetSize(Command):
 
         model1 = prompt.get(var1)
         model2 = model1.copy(verbose=False)
+        model2.resize(Lx, Ly, verbose=False)
 
-        model2.resize(Lx, Ly, verbose=True)
-
-        prompt.memory_models[var2] = model2
+        prompt.put(var2, model2)
         print()
 
 
@@ -484,7 +598,8 @@ class CommandSetSize(Command):
     def complete(self, prompt: ProfileEditorPrompt, args: list):
         if len(args) == 1 or len(args) == 4:
             return _match_models(prompt, args[-1])
-        return [] 
+        return []
+
 
 class CommandSetMinimizer(Command):
     def __init__(self):
@@ -514,7 +629,7 @@ class CommandSetMinimizer(Command):
         model2.minimizer = minimizer
         model2.dt = dt
 
-        prompt.memory_models[var2] = model2
+        prompt.put(var2, model2)
         print()
 
 
@@ -525,7 +640,6 @@ class CommandSetMinimizer(Command):
         if len(args) == 2:
             return ['mu', 'nonlocal']
         return [] 
-
 
 
 class CommandInterface(Command):
@@ -569,7 +683,7 @@ class CommandInterface(Command):
         psi_out = model_sol.psi * bump + model_liq.psi * (1-bump)
         model_out.set_psi(psi_out, verbose=False)
 
-        prompt.memory_models[var_out] = model_out
+        prompt.put(var_out, model_out)
         print()
 
 
@@ -578,6 +692,7 @@ class CommandInterface(Command):
         if len(args) == 1 or len(args) == 2 or len(args) == 4:
             return _match_models(prompt, args[-1])
         return [] 
+
 
 class CommandLiquefy(Command):
     def __init__(self):
@@ -614,7 +729,7 @@ class CommandLiquefy(Command):
 
         model_out.set_psi(param['density'] + 0*model.X, verbose=False)
 
-        prompt.memory_models[var_out] = model_out
+        prompt.put(var_out, model_out)
         print()
 
 
@@ -623,9 +738,9 @@ class CommandLiquefy(Command):
         if len(args) == 1 or len(args) == 2:
             return _match_models(prompt, args[-1])
         if len(args) == 3:
-            return ['--density']
-
+            return ['--density ']
         return [] 
+
 
 class CommandInsert(Command):
     def __init__(self):
@@ -702,9 +817,7 @@ class CommandInsert(Command):
         
         model_out.set_psi(psi_large)
 
-
-
-        prompt.memory_models[var_out] = model_out
+        prompt.put(var_out, model_out)
         print()
 
 
@@ -713,10 +826,12 @@ class CommandInsert(Command):
         if len(args) == 1 or len(args) == 2:
             return _match_models(prompt, args[-1])
         if len(args) >= 3:
-            return ['--position', '--offset']
-
+            if args[-2] == '--position':
+                return ['top ', 'bottom ', 'left ', 'right ', 'center ']
+            if args[-2] == '--offset':
+                return []
+            return ['--position ', '--offset ']
         return [] 
-
 
 
 class CommandEvolve(Command):
@@ -726,12 +841,12 @@ class CommandEvolve(Command):
     @overrides(Command)
     def execute(self, prompt: ProfileEditorPrompt, args: list):
         if len(args) < 1:
-            raise CommandExecutionError('syntax: evolve VAR')
+            raise CommandExecutionError('syntax: evolve VAR [options]')
 
         var = args[0]
         extra = args[1:]
 
-        params = {'lazy': 1}
+        params = {'lazy': 1, 'display-precision': 5}
         
         i = 0
         try:
@@ -753,7 +868,8 @@ class CommandEvolve(Command):
 
         lock, thread = None, None
         if model.minimizer == 'mu':
-            lock, thread = model.run_background(model.minimize_mu, (model.dt,))
+            lock, thread = model.run_background(model.minimize_mu, (model.dt,), 
+                                                {'display_precision': params['display-precision']})
         if model.minimizer == 'nonlocal':
             lock, thread = model.run_background(model.minimize_nonlocal_conserved, (model.dt,))
 
@@ -772,22 +888,22 @@ class CommandEvolve(Command):
 
                     resp = input('enter action: ')
 
-                    if resp in ['0', '2']:
+                    if resp in ['0']:
                         model.plot(lazy_factor=params['lazy'])
 
-                    if resp in ['8', '9']:
+                    if resp in ['8']:
                         model.stop_minimization()
+                        print()
                         return
-        print()
-
 
     @overrides(Command)
     def complete(self, prompt: ProfileEditorPrompt, args: list):
         if len(args) == 1:
             return _match_models(prompt, args[-1])
-        if len(args) == 2:
-            return ['--lazy-plot']
-
+        if len(args) >= 2:
+            if args[-2] == '--lazy-plot' or args[-2] == '--display-precision':
+                return [] 
+            return ['--lazy-plot ', '--display-precision ']
         return [] 
 
 
@@ -823,7 +939,6 @@ class CommandHistory(Command):
     def complete(self, prompt: ProfileEditorPrompt, args: list):
         if len(args) == 1:
             return _match_models(prompt, args[-1])
-
         return [] 
 
 
@@ -849,11 +964,43 @@ class CommandResetHistory(Command):
     def complete(self, prompt: ProfileEditorPrompt, args: list):
         if len(args) == 1:
             return _match_models(prompt, args[-1])
-
         return [] 
 
 
+class CommandIPython(Command):
+    ipython_session = './.pipe_ipython_session'
+    ipython_startup = './.pipe_ipython_startup.py'
+    def __init__(self):
+        super().__init__('ipython3')
+        os.remove(self.ipython_session)
+        open(self.ipython_session, 'a').close()
 
+    @overrides(Command)
+    def execute(self, prompt: ProfileEditorPrompt, args: list):
+        candidates = [f'ipython3 --no-banner -i {self.ipython_startup}', 'python3', 'ipython', 'python']
+        terminal_width = 80
+        try:
+            terminal_width = os.get_terminal_size().columns
+        except:
+            pass
+
+
+        prompt.output(f'launching {candidates[0]} ...')
+        print(cmn.bcolors.OKGREEN + '┌' + '─' * (terminal_width//4*3) + '┐' + cmn.bcolors.ENDC)
+        os.system(candidates[0])
+
+        print(cmn.bcolors.OKGREEN + '└' + '─' * (terminal_width//4*3) + '┘' + cmn.bcolors.ENDC)
+        prompt.output(f'terminating {candidates[0]} ...')
+        print()
+        return
+
+
+         
+
+
+    @overrides(Command)
+    def complete(self, prompt: ProfileEditorPrompt, args: list):
+        return [] 
 
 
 class CommandExit(Command):
@@ -870,12 +1017,10 @@ class CommandExit(Command):
 
 
 
-def _match_models(prompt: ProfileEditorPrompt, arg):
-    res = []
-    for m in prompt.memory_models:
-        if m.startswith(arg):
-            res.append(m)
-    return res
+
+
+def _match_models(prompt, arg):
+    return [f'{mod} ' for mod in prompt.memory_models.keys() if mod.startswith(arg)]
 
 
 

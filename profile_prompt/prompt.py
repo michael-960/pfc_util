@@ -14,7 +14,7 @@ import re
 import readline
 
 
-_version = '1.2'
+_version = '2.2'
 RE_SPACE = re.compile('.*\s+$', re.M)
 
 
@@ -24,10 +24,16 @@ class SimplePrompt(object):
         self.commands_obj = dict()
         self.commands_str = ''
         self.running = False
+        self.prefix = '>'
 
-        readline.parse_and_bind('tab: complete')
+        readline.parse_and_bind('set show-all-if-ambiguous on')
+        readline.parse_and_bind('set colored-stats on')
+        readline.parse_and_bind('tab: menu-complete')
+
+
         readline.set_completer_delims(' \t\n;')
         readline.set_completer(self.complete)
+
 
 
     def add_command(self, command):
@@ -35,7 +41,7 @@ class SimplePrompt(object):
         self.commands_str = ', '.join((f'{cmd}' for cmd in self.commands_obj.keys()))
 
     def consume(self):
-        cmd_str = input('> ')
+        cmd_str = input(f'{self.prefix }')
         self.handle_command(cmd_str)
 
     def handle_command(self, cmd_str: str):
@@ -62,13 +68,12 @@ class SimplePrompt(object):
             return
 
         except CommandExecutionError as e:
-            self.output(e.message, -1)
+            self.output(e.message, 2)
             print()
 
             
     def start(self):
-        self.output('PFC interactive profile editor')
-        self.output(f'version = {_version}')
+        self.put_banner()
         self.running = True
         while self.running:
             try:
@@ -79,15 +84,19 @@ class SimplePrompt(object):
                 print()
                 pass
         self.output('terminating prompt')
+        self._on_exit()
+
+    def put_banner(self):
+        pass
 
     # 0: ok, 1: warning, else: error
     def output(self, s, level=0):
         if level == 0:
-            print(f'{cmn.bcolors.BOLD}{cmn.bcolors.OKCYAN}[factory]{cmn.bcolors.ENDC} {s}')
+            print(f'{cmn.bcolors.BOLD}{cmn.bcolors.OKCYAN}[]{cmn.bcolors.ENDC} {s}')
         elif level == 1:
-            print(f'{cmn.bcolors.BOLD}{cmn.bcolors.WARNING}[factory]{cmn.bcolors.ENDC} {s}')
+            print(f'{cmn.bcolors.BOLD}{cmn.bcolors.WARNING}[]{cmn.bcolors.ENDC} {s}')
         else:
-            print(f'{cmn.bcolors.BOLD}{cmn.bcolors.FAIL}[factory]{cmn.bcolors.ENDC} {s}')
+            print(f'{cmn.bcolors.BOLD}{cmn.bcolors.FAIL}[]{cmn.bcolors.ENDC} {s}')
 
     def complete(self, text, state):
         # Generic readline completion entry point
@@ -107,15 +116,20 @@ class SimplePrompt(object):
         if cmd in self.commands_obj.keys():
             args = line[1:]
             if args:
-                result_list = self.commands_obj[cmd].complete(self, args) + [None]
+                candidates = self.commands_obj[cmd].complete(self, args)
+                result_list = [can for can in candidates if can.startswith(args[-1])] + [None]
+                
                 return result_list[state]
-
             return [cmd + ' '][state]
 
 
         # incomplete command
         results = [c + ' ' for c in self.commands_obj.keys() if c.startswith(cmd)] + [None]
         return results[state]
+
+    def _on_exit(self):
+        return
+
 
 
 class CommandExecutionError(Exception):
