@@ -1,6 +1,6 @@
 import numpy as np
 from matplotlib import pyplot as plt
-from scipy.fft import fft2, ifft2, rfft2, irfft2
+from scipy.fft import fft2, ifft2, rfft2, irfft2, set_global_backend
 from pprint import pprint
 import pyfftw
 import time
@@ -26,6 +26,9 @@ class PhaseFieldCrystal2D:
 
         self.minimizer = 'mu'
         self.running = False
+
+        set_global_backend(pyfftw.interfaces.scipy_fft)
+    
 
 
     def set_noise(self, seed, width):
@@ -72,14 +75,12 @@ class PhaseFieldCrystal2D:
             self.yell(f'new dimensions set, Lx={Lx} Ly={Ly}') 
             self.yell(f'k-space dimensions {self.K4.shape}')
 
-
     def initialize_fftw(self, **fftwargs):
         psi_tmp = self.psi.copy()
         self.for_psi = pyfftw.FFTW(self.psi, self.psi_k, direction='FFTW_FORWARD', axes=(0,1), **fftwargs)
         self.bac_psi = pyfftw.FFTW(self.psi_k, self.psi, direction='FFTW_BACKWARD', axes=(0,1), **fftwargs)
         self.set_psi(psi_tmp)
 
-   
     def set_psi(self, psi1, verbose=True):
         if psi1.shape[0] != self.Nx or psi1.shape[1] != self.Ny:
             raise ValueError(f'array has incompatible shape {psi1.shape} with ({self.Nx, self.Ny})')
@@ -87,7 +88,6 @@ class PhaseFieldCrystal2D:
         self.psi[:,:] = psi1
         if verbose:
             self.yell('new psi set')
-
 
     def new_history(self):
         self.history = {'t': [], 'Omega': [], 'psi0': [], 'max-min': [], 'omega': []}
@@ -120,7 +120,6 @@ class PhaseFieldCrystal2D:
         else:
             self.minimizer = saved_npz['minimizer']
 
-
     def dump_profile_to_file(self, target_npz, verbose=True, **kwargs):
         if verbose:
             self.yell(f'dumping profile data to {target_npz}')
@@ -129,38 +128,11 @@ class PhaseFieldCrystal2D:
                  mu=self.mu, eps=self.eps, history=self.history, 
                  dt=self.dt, minimizer=self.minimizer, **kwargs)
 
-    def _prepare_simulation(self, dt):
-        self._exp_dt_kernel = np.exp(-dt*self.Kernel)
-        self._exp_dt_eps = np.exp(dt*self.eps/2)
-        self.dt = dt
-        self.initialize_fftw()
-        
-
-    def _evolve_k(self):
-        self.for_psi()
-        self.psi_k *= self._exp_dt_kernel
-        self.bac_psi()
-
-    def _evolve_x(self):
-        self.psi *= self._exp_dt_eps
-        self.psi -= self.dt/2 * (self.psi**3 - self.mu)
-
-    def _evolve_conserved_nonlocal(self, dt):
-        psi3k = fft2(self.psi**3)
-        psik = fft2(self.psi)
-
-        psik00 = psik[0,0]
-        psik *= np.exp(-dt*(self.Kernel-self.eps))
-        psik += -dt * psi3k
-        psik[0,0] = psik00
-        self.psi = np.real(ifft2(psik))
-
-
     def _evolve_noise(self):
         self.psi += self.dt * np.random.normal(0, self.noise_width, size=(self.Nx, self.Ny))
 
-    # total particl number = psi integrated over all volume
     def calc_N_tot(self):
+        # total particle number = psi integrated over all volume
         return np.sum(np.real(self.psi)) * self.dx * self.dy
 
     # local chemical potential
@@ -185,10 +157,9 @@ class PhaseFieldCrystal2D:
         f = 1/2 * self.psi * irfft2(psi_k_o) + self.psi**4/4 - self.eps/2 * self.psi**2
         return np.real(f)
 
-    #
+    # difference
     def calc_ord_param(self):
         return np.max(self.psi) - np.min(self.psi)
-
     
     # plot psi, chemical potential density, and grand potential density
     def plot(self, cmap='jet', plot_psi=True, plot_mu=True, plot_omega=True, lazy_factor=1):
@@ -197,7 +168,6 @@ class PhaseFieldCrystal2D:
 
         plt.figure(figsize=(12.8, 3.2*num_plots))
         index_plot = 1
-
 
         LF = lazy_factor
 
@@ -231,17 +201,65 @@ class PhaseFieldCrystal2D:
         plt.tight_layout()
         plt.show(block=True)
 
+    def _prepare_simulation(self, dt):
+        self._exp_dt_kernel = np.exp(-dt*self.Kernel)
+        self._exp_dt_eps = np.exp(dt*self.eps/2)
+        self.dt = dt
+        self.initialize_fftw()
+
+        # used for nonlocal convserved
+        self._psi_bar = np.mean(self.psi)
+        self._exp_dt_kernel_conserved = self._exp_dt_kernel.copy()
+        self._exp_dt_kernel_conserved[0,0] = 1.
+        
+    def _evolve_k(self):
+        self.for_psi()
+        self.psi_k *= self._exp_dt_kernel
+        self.bac_psi()
+
+    def _evolve_x(self):
+        self.psi *= self._exp_dt_eps
+        self.psi -= self.dt/2 * (self.psi**3 - self.mu)
+
+    def _evolve_conserved_nonlocal(self):
+        dt = self.dt
+
+        #psi3 = self.psi**3
+        #self.psi -= dt/2 * (psi3 - np.mean(psi3))
+        #self.psi = (self.psi - self._psi_bar)*self._exp_dt_eps + self._psi_bar
+
+        #self.for_psi()
+        #self.psi_k *= self._exp_dt_kernel_conserved
+        #self.bac_psi()
+
+        #psi3 = self.psi**3
+        #self.psi -= dt/2 * (psi3 - np.mean(psi3))
+        #self.psi = (self.psi - self._psi_bar)*self._exp_dt_eps + self._psi_bar
+        
+        psi3k = rfft2(self.psi**3)
+
+        self.for_psi()
+        psik00 = self.psi_k[0,0]
+        self.psi_k -= dt * psi3k
+        self.psi_k *= self._exp_dt_eps**2
+        self.psi_k *= self._exp_dt_kernel_conserved
+        self.psi_k[0,0] = psik00
+        self.bac_psi()
+        self.psi = np.real(self.psi)
+
+
     #
-    def summarize(self):
+    def summarize(self, display_precision=5):
+        dp = display_precision
         self.yell(f'------------------------------------------------------------')
         self.yell(f'Summary:')
         self.yell(f'mu={self.mu}\t\teps={self.eps}')
-        self.yell(f'Lx={self.Lx:.6f}\t\tLy={self.Ly:.6f}')
+        self.yell(f'Lx={self.Lx:.{dp}f}\t\tLy={self.Ly:.{dp}f}')
         self.yell(f'Nx={self.Nx}\t\tNy={self.Ny}')
         dpu = self.Nx * self.Ny / self.Volume * np.pi*4 * np.pi*4/np.sqrt(3)
-        self.yell(f'DPUC={dpu}')
+        self.yell(f'DPUC={dpu:.{dp}f}')
+        self.yell(f'minimizer={self.minimizer}\tdt={self.dt}')
 
-        self.yell(f'dt={self.dt}\tminimizer={self.minimizer}')
         if len(self.history['t']) > 0:
             age = self.history['t'][-1]
             self.yell(f'age={age}')
@@ -249,11 +267,10 @@ class PhaseFieldCrystal2D:
             self.yell(f'age=not evolved yet')
 
         Omega = self.calc_grand_potential()
+        omega = Omega / self.Volume
         psi0 = self.calc_N_tot() / self.Volume
-        self.yell(f'Omega={Omega:.5f}\tpsi0={psi0:.5f}')
-
+        self.yell(f'Omega={Omega:.{dp}f}\tomega={omega:.{dp}f}\tpsi0={psi0:.{dp}f}')
         self.yell(f'------------------------------------------------------------')
-
 
     def new_lock(self):
         self.lock = threading.Lock()
@@ -298,12 +315,13 @@ class PhaseFieldCrystal2D:
                 omega = self.calc_grand_potential_density()
                 Omega = np.sum(omega) * self.dx * self.dy
                 ord_param = self.calc_ord_param()
+                mu = np.mean(self.calc_chemical_potential_density())
                 with self.lock:
                     if not self.running:
                         return
                     sys.stdout.write(
                         f'\r[pfcim] t={t:.{dp}f} | psi_bar={psi0:.{dp}f} | Omega={Omega:.{dp}f} | ' +\
-                        f'omega={Omega/self.Volume:.{dp+2}f} | diff={ord_param:.{dp}f}       '
+                        f'omega={Omega/self.Volume:.{dp+2}f} | mu={mu:.{dp+2}f} | diff={ord_param:.{dp}f}       '
                     )
 
                 self.history['Omega'] = np.append(self.history['Omega'], Omega)
@@ -317,32 +335,54 @@ class PhaseFieldCrystal2D:
         print()
 
     # minimize with nonlocal conserved dynamics
-    def minimize_nonlocal_conserved(self, dt, cycle=31, verbose=True, t0=0):
+    def minimize_nonlocal_conserved(self, dt, cycle=31, verbose=True, display_precision=5):
         i = 0
-        t = t0
-        if verbose:
-            psi0 = self.calc_N_tot() / self.Volume
-            self.yell(f'minimizing free energy with nonlocal conserved dynamics')
-            self.yell(f'psi_bar={psi0}')
+        t = 0
+        if len(self.history['t']) > 0:
+            t = self.history['t'][-1]
 
+        self._prepare_simulation(dt)
+        self.running = True
+
+        dp = display_precision
+
+        if verbose:
+            self.summarize()
+        
         while True:
             with self.lock:
-                self._evolve_noise(dt)
-                self._evolve_conserved_nonlocal(dt)
-
+                if not self.running:
+                    return
+                self._evolve_noise()
+                self._evolve_conserved_nonlocal()
             t += dt
             i += 1
-
+                                
             if i >= cycle:
-
                 psi0 = self.calc_N_tot() / self.Volume
                 omega = self.calc_grand_potential_density()
                 Omega = np.sum(omega) * self.dx * self.dy
+                helm = self.calc_helmholtz_density()
+                Helm = np.sum(helm) * self.dx * self.dy
                 ord_param = self.calc_ord_param()
+                mu = np.mean(self.calc_chemical_potential_density())
+                with self.lock:
+                    if not self.running:
+                        return
+                    sys.stdout.write(
+                        f'\r[pfcim] t={t:.{dp}f} | psi_bar={psi0:.{dp}f} | Omega={Omega:.{dp}f} | ' +\
+                        f'omega={Omega/self.Volume:.{dp+2}f} | mu={mu:.{dp+2}f} | diff={ord_param:.{dp}f}       '
+                    )
 
+                self.history['Omega'] = np.append(self.history['Omega'], Omega)
+                self.history['t'] = np.append(self.history['t'], t)
+                self.history['psi0'] = np.append(self.history['psi0'], psi0)
+                self.history['max-min'] = np.append(self.history['max-min'], ord_param)
+                self.history['omega'] = np.append(self.history['omega'], Omega/self.Volume)
                 i = 0
-                sys.stdout.write(f'\r[pfc] t={t} | psi_bar={psi0} | Omega={Omega} | diff={ord_param}    ')
+
         print()
+
 
     def run_background(self, func, args, kwargs=dict()):
         if self.lock is None:

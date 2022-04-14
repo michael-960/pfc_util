@@ -14,7 +14,7 @@ import numexpr
 from .prompt import Command, CommandExecutionError, SimplePrompt
 import time
 
-_version = '2.5'
+_version = '2.6'
 _date = '2022/04/13'
 _author = 'michael'
 
@@ -57,6 +57,7 @@ class ProfileEditorPrompt(SimplePrompt):
         self.add_command(CommandInterface())
         self.add_command(CommandLiquefy())
         self.add_command(CommandInsert())
+        self.add_command(CommandConcat())
 
         self.add_command(CommandExit())
 
@@ -287,21 +288,57 @@ class CommandInfo(Command):
 
     @overrides(Command)
     def execute(self, prompt: ProfileEditorPrompt, args: list):
-        if len(args) != 1: 
-            raise CommandExecutionError('syntax: info VARNAME')
+        if len(args) < 1: 
+            raise CommandExecutionError('syntax: info VARNAME [options]')
         varname = args[0]
         extra = args[1:]
+        params = {'less': False, 'display-precision': 5}
+        # parse extra args
         i = 0
+        try:
+            while i < len(extra):
+                if extra[i] == '--less':
+                    params['less'] = True
+                elif extra[i] == '--display-precision':
+                    assert i+1 < len(extra)
+                    params['display-precision'] = int(extra[i+1])
+                    i += 1
+                i += 1
+
+        except AssertionError:
+            raise CommandExecutionError('error ocurred while parsing arguments')
+        except ValueError as e:
+            raise CommandExecutionError(e.args[-1])
+
+
 
         model = prompt.get(varname)
-        prompt.output('invoking pfc model methods')
-        model.summarize()
+        dp = params['display-precision']
+        mu = model.mu
+        eps = model.eps
+        Lx = model.Lx
+        Ly = model.Ly
+        Nx = model.Nx
+        Ny = model.Ny
+        Omega = model.calc_grand_potential()
+        omega = Omega / model.Volume
+
+        if params['less']:
+            prompt.output(f'mu={mu}\teps={eps}')
+            prompt.output(f'Lx={Lx:.{dp}f}\tLy={Ly:.{dp}f}\tNx={Nx}\tNy={Ny}')
+            prompt.output(f'Omega={Omega:.{dp}f}\tomega={omega:.{dp}f}')
+        else:
+            model.summarize(display_precision=dp)
         print()
                 
     @overrides(Command)
     def complete(self, prompt: ProfileEditorPrompt, args: list):
         if len(args) == 1:
             return _match_models(prompt, args[-1])
+        if len(args) >= 1:
+            if args[-1] == '--display-precision':
+                return []
+            return ['--display-precision ', '--less ']
         return [] 
 
 
@@ -802,13 +839,13 @@ class CommandInsert(Command):
             box_X = 0
             
         if param['position'] == 'right':
-            box_X = model.Nx - box_Nx
+            box_X = model_l.Nx - box_Nx
 
         if param['position'] == 'top':
             box_Y = 0
             
         if param['position'] == 'bottom':
-            box_Y = model.Ny - box_Ny
+            box_Y = model_l.Ny - box_Ny
 
         psi_large[box_X:box_X+box_Nx, box_Y:box_Y+box_Ny] = psi_small_modified
         
@@ -823,15 +860,95 @@ class CommandInsert(Command):
 
     @overrides(Command)
     def complete(self, prompt: ProfileEditorPrompt, args: list):
-        if len(args) == 1 or len(args) == 2:
+        if len(args) == 1 or len(args) == 2 or len(args) == 3:
             return _match_models(prompt, args[-1])
-        if len(args) >= 3:
+        if len(args) >= 4:
             if args[-2] == '--position':
-                return ['top ', 'bottom ', 'left ', 'right ', 'center ']
+                return ['top', 'bottom', 'left', 'right', 'center']
             if args[-2] == '--offset':
                 return []
-            return ['--position ', '--offset ']
+            return ['--position', '--offset']
         return [] 
+    
+class CommandConcat(Command):
+    def __init__(self):
+        super().__init__('concat')
+
+    @overrides(Command)
+    def execute(self, prompt: ProfileEditorPrompt, args: list):
+        if len(args) < 3:
+            raise CommandExecutionError(
+                'syntax: concat VAR1 VAR2 [top|bottom|left|right] VAROUT')
+
+        var1 = args[0]
+        var2 = args[1]
+        var_out = args[2]
+        extra = args[3:]
+        
+        model_s = prompt.get(var_s)
+        model_l = prompt.get(var_l)
+        param = {'position': 'center', 'offset': (0,0), 'width': 0}
+
+        if not (model_s.Lx <= model_l.Lx and model_s.Ly <= model_l.Ly):
+            raise CommandExecutionError('the first model must have smaller dimensions than the second one')
+
+
+        # parse extra arguments
+        i = 0
+        while i < len(extra):
+            if extra[i] == '--position':
+                if len(extra) <= i+1:
+                    raise CommandExecutionError('please specify a position after --position')
+                if not extra[i+1] in ['left', 'right', 'top' 'bottom', 'center']:
+                    raise CommandExecutionError(f'invalid position: {extra[i+1]}')
+                param['position'] = extra[i+1]
+                i += 1
+
+            elif extra[i] == '--offset':
+                if len(extra) <= i+2:
+                    raise CommandExecutionError('please specify x and y offsets after --offset')
+                try:
+                    param['offset'] = (float(extra[i+1]), float(extra[i+2]))
+                except ValueError as e:
+                    raise CommandExecutionError(f'invalid offset: {extra[i+1]} {extra[i+2]}')
+                i += 2
+
+            else:
+                raise CommandExecutionError(f'unkonw option: {extra[i]}')
+
+            i += 1
+        
+        psi_small = model_s.psi.copy()
+        psi_large = model_l.psi.copy()
+
+        box_Nx, box_Ny = int(model_s.Lx / model_l.Lx * model_l.Nx), int(model_s.Ly / model_l.Ly * model_l.Ny)
+        
+        psi_small_modified = pe.change_resolution(psi_small, box_Nx, box_Ny)
+       
+        box_X, box_Y = int(model_l.Nx/2 - box_Nx/2), int(model_l.Ny/2 - box_Ny/2)
+        if param['position'] == 'left':
+            box_X = 0
+            
+        if param['position'] == 'right':
+            box_X = model_l.Nx - box_Nx
+
+        if param['position'] == 'top':
+            box_Y = 0
+            
+        if param['position'] == 'bottom':
+            box_Y = model_l.Ny - box_Ny
+
+        psi_large[box_X:box_X+box_Nx, box_Y:box_Y+box_Ny] = psi_small_modified
+        
+
+        model_out = model_l.copy(verbose=False)
+        
+        model_out.set_psi(psi_large)
+
+        prompt.put(var_out, model_out)
+        print()
+
+
 
 
 class CommandEvolve(Command):
@@ -871,7 +988,8 @@ class CommandEvolve(Command):
             lock, thread = model.run_background(model.minimize_mu, (model.dt,), 
                                                 {'display_precision': params['display-precision']})
         if model.minimizer == 'nonlocal':
-            lock, thread = model.run_background(model.minimize_nonlocal_conserved, (model.dt,))
+            lock, thread = model.run_background(model.minimize_nonlocal_conserved, (model.dt,), 
+                                                {'display_precision': params['display-precision']})
 
         while True:
             try:
@@ -968,8 +1086,8 @@ class CommandResetHistory(Command):
 
 
 class CommandIPython(Command):
-    ipython_session = './.pipe_ipython_session'
-    ipython_startup = './.pipe_ipython_startup.py'
+    ipython_session = '.pipe_ipython_session'
+    ipython_startup = '.pipe_ipython_startup.py'
     def __init__(self):
         super().__init__('ipython3')
         os.remove(self.ipython_session)
@@ -985,12 +1103,12 @@ class CommandIPython(Command):
             pass
 
 
-        prompt.output(f'launching {candidates[0]} ...')
+        #prompt.output(f'launching {candidates[0]} ...')
         print(cmn.bcolors.OKGREEN + '┌' + '─' * (terminal_width//4*3) + '┐' + cmn.bcolors.ENDC)
         os.system(candidates[0])
 
         print(cmn.bcolors.OKGREEN + '└' + '─' * (terminal_width//4*3) + '┘' + cmn.bcolors.ENDC)
-        prompt.output(f'terminating {candidates[0]} ...')
+        #prompt.output(f'terminating {candidates[0]} ...')
         print()
         return
 
@@ -1017,10 +1135,8 @@ class CommandExit(Command):
 
 
 
-
-
 def _match_models(prompt, arg):
-    return [f'{mod} ' for mod in prompt.memory_models.keys() if mod.startswith(arg)]
+    return [f'{mod}' for mod in prompt.memory_models.keys() if mod.startswith(arg)]
 
 
 
