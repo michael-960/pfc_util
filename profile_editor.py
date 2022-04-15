@@ -3,7 +3,11 @@ from matplotlib import pyplot as plt
 from scipy.fft import fft2, ifft2, fft, ifft
 from pprint import pprint
 
-
+def modify_and_save(new_file_name, saved, **modified):
+    data = dict(saved)
+    for m in modified:
+        data[m] = modified[m]
+    np.savez(new_file_name, **data)
 
 def change_resolution(psi, Nx1, Ny1):
     Nx, Ny = psi.shape[0], psi.shape[1]
@@ -13,7 +17,6 @@ def change_resolution(psi, Nx1, Ny1):
         for j in range(Ny1):
             psi1[i,j] = psi[int(i*Nx/Nx1),int(j*Ny/Ny1)]
     return psi1
-
 
 def periodic_extend(psi, Mx, My):
     Nx, Ny = psi.shape[0], psi.shape[1]
@@ -28,11 +31,8 @@ def periodic_extend(psi, Mx, My):
     return psi1
 
 
-def modify_and_save(new_file_name, saved, **modified):
-    data = dict(saved)
-    for m in modified:
-        data[m] = modified[m]
-    np.savez(new_file_name, **data)
+
+
 
 
 

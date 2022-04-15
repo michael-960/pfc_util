@@ -18,24 +18,19 @@ class PhaseFieldCrystal2D:
         self.set_psi(np.zeros((Nx, Ny)), verbose=verbose)
         self.set_params(0, 0, verbose=verbose)
         self.set_noise(0, 0)
-
         self.lock = None
-
         self.new_lock()
         self.new_history()
+        
 
         self.minimizer = 'mu'
         self.running = False
 
         set_global_backend(pyfftw.interfaces.scipy_fft)
-    
-
 
     def set_noise(self, seed, width):
-
         self.seed = seed
         np.random.seed(self.seed)
-
         self.noise_width = width
 
     def set_params(self, mu, eps, verbose=True):
@@ -393,14 +388,17 @@ class PhaseFieldCrystal2D:
 
         return self.lock, thread
     
-    def copy(self, verbose=True):
+    def copy(self, verbose=True, copy_history=True):
         other = PhaseFieldCrystal2D(1, 1, 1, 1, verbose=verbose)
         other.set_dimensions(self.Lx, self.Ly, self.Nx, self.Ny, verbose=verbose)
         other.set_params(self.mu, self.eps, verbose=verbose)
         other.set_psi(self.psi, verbose=verbose)
 
         other.dt = self.dt
-        other.history = self.history.copy()
+        if copy_history:
+            other.history = self.history.copy()
+        else:
+            other.new_history()
 
         return other
 
@@ -408,8 +406,26 @@ class PhaseFieldCrystal2D:
         print(f'[pfcim] {s}')
 
 
+class PFCMinimizer:
+    def __init__(self, parent: PhaseFieldCrystal2D):
+        self.parent = None
+
+    def run(self):
+        pass
 
 
+class ConstantChemicalPotentialMinimizer(PFCMinimizer):
+    def __init__(self, parent: PhaseFieldCrystal2D):
+        super().__init__()
 
+
+class NonlocalConservedMinimizer(PFCMinimizer):
+    def __init__(self, parent: PhaseFieldCrystal2D):
+        super().__init__()
+
+
+class PFCHistory:
+    def __init__(self):
+        pass
 
 

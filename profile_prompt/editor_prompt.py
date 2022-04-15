@@ -7,6 +7,7 @@ import numpy as np
 import sys
 import subprocess
 from util import common as cmn
+from util.common import overrides
 import os
 import re
 import readline
@@ -18,14 +19,6 @@ _version = '2.6'
 _date = '2022/04/13'
 _author = 'michael'
 
-
-def overrides(interface_class):
-    def overrider(method):
-        assert(method.__name__ in dir(interface_class))
-        return method
-    return overrider
-
-#------------------------------------------------------------------------------------
 
 
 class ProfileEditorPrompt(SimplePrompt):
@@ -57,6 +50,8 @@ class ProfileEditorPrompt(SimplePrompt):
         self.add_command(CommandInterface())
         self.add_command(CommandLiquefy())
         self.add_command(CommandInsert())
+        self.add_command(CommandFlip())
+        self.add_command(CommandRotate())
         self.add_command(CommandConcat())
 
         self.add_command(CommandExit())
@@ -94,7 +89,7 @@ class ProfileEditorPrompt(SimplePrompt):
         print(f'{cmn.bcolors.BOLD}{color}[PIPE]{cmn.bcolors.ENDC} {s}')
 
 
-    def get(self, varname):
+    def get(self, varname) -> pfc_im.PhaseFieldCrystal2D:
         try:
             return self.memory_models[varname]
         except KeyError:
@@ -411,8 +406,7 @@ class CommandCrop(Command):
         extra = args[6:]
 
         model1 = prompt.get(var1)
-        model2 = model1.copy(verbose=False)
-    
+        model2 = model1.copy(verbose=False, copy_history=False)
 
         Nx2 = int(model1.Nx * (ratio_x2 - ratio_x1))
         Ny2 = int(model1.Ny * (ratio_y2 - ratio_y1))
@@ -710,7 +704,7 @@ class CommandInterface(Command):
         except AssertionError as e:
             raise CommandExecutionError(f'models {var_sol} and {var_liq} do not have the same dimensions')
 
-        model_out = model_sol.copy(verbose=False)
+        model_out = model_sol.copy(verbose=False, copy_history=False)
 
         X, Y = model_sol.X, model_sol.Y
         xa = model_sol.Lx / 4
@@ -850,9 +844,8 @@ class CommandInsert(Command):
         psi_large[box_X:box_X+box_Nx, box_Y:box_Y+box_Ny] = psi_small_modified
         
 
-        model_out = model_l.copy(verbose=False)
-        
-        model_out.set_psi(psi_large)
+        model_out = model_l.copy(verbose=False, copy_history=False)
+        model_out.set_psi(psi_large, verbose=False)
 
         prompt.put(var_out, model_out)
         print()
@@ -869,86 +862,140 @@ class CommandInsert(Command):
                 return []
             return ['--position', '--offset']
         return [] 
-    
+
+class CommandFlip(Command):
+    def __init__(self):
+        super().__init__('flip')
+
+    @overrides(Command)
+    def execute(self, prompt: ProfileEditorPrompt, args: list):
+        if len(args) < 3:
+            raise CommandExecutionError(
+                'syntax: flip VAR [X|Y] VAROUT')
+
+        var = args[0]
+        axis = args[1]
+        var_out = args[2]
+        extra = args[3:]
+        
+        model = prompt.get(var)
+
+        model_out = model.copy(verbose=False)
+
+        if axis == 'Y':
+            model_out.set_psi(model.psi[::-1,:], verbose=False)
+        elif axis == 'X':
+            model_out.set_psi(model.psi[:,::-1], verbose=False)
+        else:
+            raise CommandExecutionError('axis must be either X or Y')
+
+        prompt.put(var_out, model_out)
+        print()
+
+
+    @overrides(Command)
+    def complete(self, prompt: ProfileEditorPrompt, args: list):
+        if len(args) == 1 or len(args) == 3:
+            return _match_models(prompt, args[-1])
+        if len(args) >= 2:
+            return ['X', 'Y']
+        return []
+
+class CommandRotate(Command):
+    def __init__(self):
+        super().__init__('rotate')
+
+    @overrides(Command)
+    def execute(self, prompt: ProfileEditorPrompt, args: list):
+        if len(args) < 3:
+            raise CommandExecutionError(
+                'syntax: rotate VAR [90|180|270] VAROUT')
+
+        var = args[0]
+        angle = args[1]
+        var_out = args[2]
+        extra = args[3:]
+        
+        model = prompt.get(var)
+        model_out = model.copy(verbose=False)
+
+        if angle == '90':
+            model_out.set_dimensions(model.Ly, model.Lx, model.Ny, model.Nx, verbose=False)
+            model_out.set_psi(np.transpose(model.psi)[:,::-1], verbose=False)
+        elif angle == '180':
+            model_out.set_psi(model.psi[::-1,::-1], verbose=False)
+        elif angle == '270':
+            model_out.set_dimensions(model.Ly, model.Lx, model.Ny, model.Nx, verbose=False)
+            model_out.set_psi(np.transpose(model.psi)[::-1,:], verbose=False)
+        else:
+            raise CommandExecutionError('axis must be 90, 180, or 270')
+
+        prompt.put(var_out, model_out)
+        print()
+
+    @overrides(Command)
+    def complete(self, prompt: ProfileEditorPrompt, args: list):
+        if len(args) == 1 or len(args) == 3:
+            return _match_models(prompt, args[-1])
+        if len(args) == 2:
+            return ['X', 'Y']
+        return []
+
+
+
 class CommandConcat(Command):
     def __init__(self):
         super().__init__('concat')
 
     @overrides(Command)
     def execute(self, prompt: ProfileEditorPrompt, args: list):
-        if len(args) < 3:
+        if len(args) < 4:
             raise CommandExecutionError(
-                'syntax: concat VAR1 VAR2 [top|bottom|left|right] VAROUT')
+                'syntax: concat VAR1 VAR2 [horizontal|vertical] VAROUT')
 
         var1 = args[0]
         var2 = args[1]
-        var_out = args[2]
-        extra = args[3:]
+        concat_direction = args[2]
+        var_out = args[3]
+        extra = args[4:]
         
-        model_s = prompt.get(var_s)
-        model_l = prompt.get(var_l)
-        param = {'position': 'center', 'offset': (0,0), 'width': 0}
+        model1 = prompt.get(var1)
+        model2 = prompt.get(var2)
 
-        if not (model_s.Lx <= model_l.Lx and model_s.Ly <= model_l.Ly):
-            raise CommandExecutionError('the first model must have smaller dimensions than the second one')
+        model_out = model1.copy(verbose=False, copy_history=False)
 
+        if concat_direction == 'vertical':
+            if model1.Nx != model2.Nx or model1.Lx != model2.Lx:
+                raise CommandExecutionError(f'models {var1} and {var2} do not have the same width')
+            model_out.set_dimensions(model1.Lx, model1.Ly+model2.Ly, model1.Nx, model1.Ny+model2.Ny, verbose=False)
+            psi_out = np.zeros(shape=(model1.Nx, model1.Ny+model2.Ny))
+            psi_out[:,:model1.Ny] = model1.psi[:,:]
+            psi_out[:,model1.Ny:] = model2.psi[:,:]
 
-        # parse extra arguments
-        i = 0
-        while i < len(extra):
-            if extra[i] == '--position':
-                if len(extra) <= i+1:
-                    raise CommandExecutionError('please specify a position after --position')
-                if not extra[i+1] in ['left', 'right', 'top' 'bottom', 'center']:
-                    raise CommandExecutionError(f'invalid position: {extra[i+1]}')
-                param['position'] = extra[i+1]
-                i += 1
+            model_out.set_psi(psi_out)
 
-            elif extra[i] == '--offset':
-                if len(extra) <= i+2:
-                    raise CommandExecutionError('please specify x and y offsets after --offset')
-                try:
-                    param['offset'] = (float(extra[i+1]), float(extra[i+2]))
-                except ValueError as e:
-                    raise CommandExecutionError(f'invalid offset: {extra[i+1]} {extra[i+2]}')
-                i += 2
+        elif concat_direction == 'horizontal':
+            if model1.Ny != model2.Ny or model1.Ly != model2.Ly:
+                raise CommandExecutionError(f'models {var1} and {var2} do not have the same height')
+            model_out.set_dimensions(model1.Lx+model2.Lx, model1.Ly, model1.Nx+model2.Nx, model1.Ny, verbose=False)
+            psi_out = np.zeros(shape=(model1.Nx+model2.Nx, model1.Ny)) 
+            psi_out[:model1.Nx,:] = model1.psi[:,:]
+            psi_out[model1.Nx:,] = model2.psi[:,:]
+            model_out.set_psi(psi_out)
 
-            else:
-                raise CommandExecutionError(f'unkonw option: {extra[i]}')
-
-            i += 1
-        
-        psi_small = model_s.psi.copy()
-        psi_large = model_l.psi.copy()
-
-        box_Nx, box_Ny = int(model_s.Lx / model_l.Lx * model_l.Nx), int(model_s.Ly / model_l.Ly * model_l.Ny)
-        
-        psi_small_modified = pe.change_resolution(psi_small, box_Nx, box_Ny)
-       
-        box_X, box_Y = int(model_l.Nx/2 - box_Nx/2), int(model_l.Ny/2 - box_Ny/2)
-        if param['position'] == 'left':
-            box_X = 0
-            
-        if param['position'] == 'right':
-            box_X = model_l.Nx - box_Nx
-
-        if param['position'] == 'top':
-            box_Y = 0
-            
-        if param['position'] == 'bottom':
-            box_Y = model_l.Ny - box_Ny
-
-        psi_large[box_X:box_X+box_Nx, box_Y:box_Y+box_Ny] = psi_small_modified
-        
-
-        model_out = model_l.copy(verbose=False)
-        
-        model_out.set_psi(psi_large)
+        else:
+            raise CommandExecutionError(f'conact direction must be either horizontal or vertical')
 
         prompt.put(var_out, model_out)
         print()
 
-
+    @overrides(Command)
+    def complete(self, prompt: ProfileEditorPrompt, args: list):
+        if len(args) == 1 or len(args) == 2 or len(args) == 4:
+            return _match_models(prompt, args[-1])
+        if len(args) == 3:
+            return ['horizontal', 'vertical']
+        return []
 
 
 class CommandEvolve(Command):
@@ -1137,8 +1184,5 @@ class CommandExit(Command):
 
 def _match_models(prompt, arg):
     return [f'{mod}' for mod in prompt.memory_models.keys() if mod.startswith(arg)]
-
-
-
 
 

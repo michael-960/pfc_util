@@ -2,8 +2,6 @@ import numpy as np
 from matplotlib import pyplot as plt
 from pprint import pprint
 
-
-
 def generate(na, nb):
     v1 = ((na+nb)*2*np.pi, (na-nb)*2*np.pi/np.sqrt(3))
     v2 = (-v1[1]*np.sqrt(3), v1[0]*np.sqrt(3))
@@ -57,7 +55,4 @@ def generate_195(na, nb, Nx, Ny):
     
 
     return X, Y, PSI, Lx, Ly, theta, unit
-
-
-
 
