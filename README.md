@@ -8,9 +8,11 @@ created by michael on 2022/04
 
 #### pfc_util.base - Low-level Interfaces
 
-##### field.Field2D(Lx, Ly, Nx, Ny)
+##### pfc_util.base.field.Field2D(Lx, Ly, Nx, Ny)
     
-    2D field object with pyfftw plans included
+2D field object with pyfftw plans included.
+
+> set_dimensions(Lx, Ly, Nx, Ny, verbose=False)
 
 
 #### pfc_util.toolkit - Tools for Editting/Analyzing PFC Fields
