@@ -78,8 +78,6 @@ class Field2D:
         plt.margins(x=0, y=0, tight=True)
         plt.show()
 
-
-
     def yell(self, s):
         print(f'[field] {s}')
 
