@@ -6,8 +6,8 @@ import pyfftw
 import time
 import threading
 import sys
-
 from util.math import fourier
+from util.common import overrides
 
 
 # pyfftw implementation
@@ -21,10 +21,9 @@ class PhaseFieldCrystal2D:
         self.lock = None
         self.new_lock()
         self.new_history()
-        
 
-        self.minimizer = 'mu'
-        self.running = False
+        #self.minimizer = 'mu'
+        #self.running = False
 
         set_global_backend(pyfftw.interfaces.scipy_fft)
 
@@ -85,7 +84,8 @@ class PhaseFieldCrystal2D:
             self.yell('new psi set')
 
     def new_history(self):
-        self.history = {'t': [], 'Omega': [], 'psi0': [], 'max-min': [], 'omega': []}
+        #self.history = {'t': [], 'Omega': [], 'psi0': [], 'max-min': [], 'omega': []}
+        self.history = []
 
     def load_profile_from_file(self, saved_npz, verbose=True):
         file_list = saved_npz.files
@@ -241,7 +241,6 @@ class PhaseFieldCrystal2D:
         self.psi_k[0,0] = psik00
         self.bac_psi()
         self.psi = np.real(self.psi)
-
 
     #
     def summarize(self, display_precision=5):
@@ -404,28 +403,5 @@ class PhaseFieldCrystal2D:
 
     def yell(self, s):
         print(f'[pfcim] {s}')
-
-
-class PFCMinimizer:
-    def __init__(self, parent: PhaseFieldCrystal2D):
-        self.parent = None
-
-    def run(self):
-        pass
-
-
-class ConstantChemicalPotentialMinimizer(PFCMinimizer):
-    def __init__(self, parent: PhaseFieldCrystal2D):
-        super().__init__()
-
-
-class NonlocalConservedMinimizer(PFCMinimizer):
-    def __init__(self, parent: PhaseFieldCrystal2D):
-        super().__init__()
-
-
-class PFCHistory:
-    def __init__(self):
-        pass
 
 

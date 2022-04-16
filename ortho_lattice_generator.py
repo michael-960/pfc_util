@@ -13,13 +13,11 @@ def generate(na, nb):
 
     return theta, Lx, Ly
 
-
 def harmonic(theta, x, y):
     k1 = (np.cos(theta), np.sin(theta))
     k2 = (np.cos(theta+2*np.pi/3), np.sin(theta+2*np.pi/3))
     k3 = (np.cos(theta+4*np.pi/3), np.sin(theta+4*np.pi/3))
     return np.cos(k1[0]*x+k1[1]*y) + np.cos(k2[0]*x+k2[1]*y) + np.cos(k3[0]*x+k3[1]*y)
-
 
 
 # generate a minimized solid profile for mu=0.195 eps=0.1
