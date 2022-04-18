@@ -1,7 +1,6 @@
-#!/opt/anaconda3/envs/turnbull/bin/python3
-from pfc_util import profile_editor as pe
-from pfc_util import ortho_lattice_generator as olg
-from pfc_util import pfc_im
+from ..toolkit import profile_editor as pe
+from ..toolkit import ortho_lattice_generator as olg
+from ..legacy import pfc_im
 from matplotlib import pyplot as plt
 import numpy as np
 import sys

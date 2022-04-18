@@ -5,11 +5,16 @@ from pprint import pprint
 import pyfftw
 from util.math import fourier
 from util.common import overrides
+import threading
 import tqdm
+import time
 
-# A Field2D is a 2D field with definite dimensions, it also includes:
+from .common import IllegalActionError, ModifyingReadOnlyObjectError
+
+# A Field2D is a complex 2D field with definite dimensions, it also includes:
 # psi, psi_k(fourier transform), forward plan, backward plan
-class Field2D:
+
+class ComplexField2D:
     def __init__(self, Lx, Ly, Nx, Ny):
         self.set_dimensions(Lx, Ly, Nx, Ny)
         self.fft2 = None
@@ -19,8 +24,8 @@ class Field2D:
         self.Nx = Nx
         self.Ny = Ny
         self.set_size(Lx, Ly, verbose=verbose)
-        self.psi = pyfftw.zeros_aligned((Nx, Ny), dtype='float64')
-        self.psi_k = pyfftw.zeros_aligned((Nx, Ny//2+1), dtype='complex128')
+        self.psi = pyfftw.zeros_aligned((Nx, Ny), dtype='complex128')
+        self.psi_k = pyfftw.zeros_aligned((Nx, Ny), dtype='complex128')
         if verbose:
             self.yell(f'new resolution set, Nx={Nx} Ny={Ny}')
             self.yell(f'reset profile, Lx={Lx} Ly={Ly} Nx={Nx} Ny={Ny}')
@@ -29,7 +34,7 @@ class Field2D:
         self.Lx = Lx
         self.Ly = Ly
         self.Volume = Lx*Ly
-        x, kx, self.dx, self.dkx, y, ky, self.dy, self.dky = fourier.generate_xk_2d(Lx, Ly, self.Nx, self.Ny, real=True)
+        x, kx, self.dx, self.dkx, y, ky, self.dy, self.dky = fourier.generate_xk_2d(Lx, Ly, self.Nx, self.Ny, real=False)
         self.dV = self.dx * self.dy
         self.X, self.Y = np.meshgrid(x, y, indexing='ij')
         self.Kx, self.Ky = np.meshgrid(kx, ky, indexing='ij')
@@ -63,8 +68,16 @@ class Field2D:
     def save(self, target_npz, verbose=False):
         if verbose:
             self.yell(f'dumping profile data to {target_npz}')
-        np.savez(target_npz, psi=self.psi, Lx=self.Lx, Ly=self.Ly)
+        np.savez(target_npz, **self.export_state()) 
 
+    def export_state(self):
+        state = {'psi': self.psi.copy(), 'Lx': self.Lx, 'Ly': self.Ly}
+        return state
+    
+    def copy(self):
+        field1 = self.__class__(self.Lx, self.Ly, self.Nx, self.Ny)
+        field1.set_psi(self.psi)
+        return field1
 
     def plot(self, lazy_factor=1, cmap='jet', vmin=-1, vmax=1):
         plt.figure(dpi=200)
@@ -81,20 +94,74 @@ class Field2D:
     def yell(self, s):
         print(f'[field] {s}')
 
-def load(filepath):
-    saved = np.load(filepath)
-    psi = saved['psi']
-    Lx = saved['Lx']
-    Ly = saved['Ly']
+
+class RealField2D(ComplexField2D):
+    def __init__(self, Lx, Ly, Nx, Ny):
+        super().__init__(Lx, Ly, Nx, Ny)
+        
+    def set_dimensions(self, Lx, Ly, Nx, Ny, verbose=False):
+        self.Nx = Nx
+        self.Ny = Ny
+        self.set_size(Lx, Ly, verbose=verbose)
+        self.psi = pyfftw.zeros_aligned((Nx, Ny), dtype='float64')
+        self.psi_k = pyfftw.zeros_aligned((Nx, Ny//2+1), dtype='complex128')
+        if verbose:
+            self.yell(f'new resolution set, Nx={Nx} Ny={Ny}')
+            self.yell(f'reset profile, Lx={Lx} Ly={Ly} Nx={Nx} Ny={Ny}')
+
+    def set_size(self, Lx, Ly, verbose=False):
+        self.Lx = Lx
+        self.Ly = Ly
+        self.Volume = Lx*Ly
+        x, kx, self.dx, self.dkx, y, ky, self.dy, self.dky = fourier.generate_xk_2d(Lx, Ly, self.Nx, self.Ny, real=True)
+        self.dV = self.dx * self.dy
+        self.X, self.Y = np.meshgrid(x, y, indexing='ij')
+        self.Kx, self.Ky = np.meshgrid(kx, ky, indexing='ij')
+
+        self.K2 = self.Kx**2 + self.Ky**2
+        self.K4 = self.K2**2
+        self.K6 = self.K2 * self.K4
+
+        if verbose:
+            self.yell(f'new dimensions set, Lx={Lx} Ly={Ly}') 
+            self.yell(f'k-space dimensions {self.K4.shape}')
+
+    def set_psi(self, psi1, verbose=False):
+        if not np.isscalar(psi1):
+            if (psi1.shape[0] != self.Nx or psi1.shape[1] != self.Ny): 
+                raise ValueError(f'array has incompatible shape {psi1.shape} with ({self.Nx, self.Ny})')
+        
+        if not np.all(np.isreal(psi1)):
+            raise ValueError(f'array is complex') 
+
+        self.psi[:,:] = psi1
+        if verbose:
+            self.yell('new psi set')
+
+
+def load(filepath, is_complex=False):
+    state = np.load(filepath)
+    return import_state(state, is_complex=False)
+
+
+def import_state(state, is_complex=False):
+    psi = state['psi']
+    Lx = state['Lx']
+    Ly = state['Ly']
     Nx = psi.shape[0]
     Ny = psi.shape[1]
+    if is_complex: 
+        field = ComplexField2D(Lx, Ly, Nx, Ny)
+        field.set_psi(psi, verbose=False)
+        return field
+    else:
+        field = RealField2D(Lx, Ly, Nx, Ny)
+        field.set_psi(psi, verbose=False)
+        return field
 
-    field = Field2D(Lx, Ly, Nx, Ny)
-    field.set_psi(psi, verbose=False)
-    return field
 
 class FieldMinimizer:
-    def __init__(self, field: Field2D):
+    def __init__(self, field: ComplexField2D):
         self.field = field
         self.started = False
         self.ended = False
@@ -111,27 +178,78 @@ class FieldMinimizer:
             i += 1
 
     def run_multisteps(self, N_steps, N_epochs):
-        if self.ended:
-            raise MinimizerEndedError(self)
+        self.start()
 
-
-        progress_bar = tqdm.tqdm(range(N_epochs))
+        progress_bar = tqdm.tqdm(range(N_epochs), bar_format='{l_bar}{bar}|{postfix}')
+        self.on_create_progress_bar(progress_bar)
         for i in progress_bar:
             self.run_steps(N_steps)
             self.on_epoch_end(progress_bar)
-        self.ended = True
-   
+
+        self.end()
+
+    def run_nonstop(self, N_steps, custom_keyboard_interrupt_handler=None):
+        self.start()
+        lock = threading.Lock()
+        stopped = False 
+        def run():
+            while True:
+                with lock:
+                    if stopped:
+                        break
+                    self.run_steps(N_steps)
+                self.on_nonstop_epoch_end()
+
+        thread = threading.Thread(target=run)
+        thread.start()
+
+        while True:
+            try:
+                time.sleep(1)
+            except KeyboardInterrupt as e:
+                with lock:
+                    if custom_keyboard_interrupt_handler is None:
+                        stopped = True 
+                        break
+
+                    else:
+                        time.sleep(0.1)
+                        stopped = custom_keyboard_interrupt_handler(self)
+                        if stopped:
+                            break
+
+        thread.join()
+        self.end()
+
+    def on_create_progress_bar(self, progress_bar: tqdm.tqdm):
+        pass
+
     def on_epoch_end(self, progress_bar: tqdm.tqdm):
         pass
 
+    def on_nonstop_epoch_end(self):
+        time.sleep(0.001)
+
+    def start(self):
+        if self.ended:
+            raise MinimizerError(self, 'minimization has already ended')
+        self.started = True
 
     def end(self):
-        self.ended = True
+        if self.started:
+            self.ended = True
+        else:
+            raise MinimizerError(self, 'minimization has not been started')
 
 
-class MinimizerEndedError(Exception):
-    def __init__(self, minimizer: FieldMinimizer):
-        self.minimizer = minimizer
+class MinimizerError(IllegalActionError):
+    def __init__(self, minimizer: FieldMinimizer, msg=None):
+        if minimizer is None:
+            self.message = 'no minimizer provided'
+        else:
+            self.message = msg
+        super().__init__(self.message)
+        self.minimier = minimizer
 
 
 class NoiseGenerator2D:
@@ -155,56 +273,17 @@ class FreeEnergyFunctional2D:
     def __init__(self):
         raise NotImplementedError()
 
-    def free_energy_density(self, field: Field2D):
+    def free_energy_density(self, field: ComplexField2D):
         raise NotImplementedError()
 
-    def free_energy(self, field: Field2D):
+    def free_energy(self, field: ComplexField2D):
         return np.sum(self.free_energy_density(field)) * field.dV
 
-    def derivative(self, field: Field2D):
+    def derivative(self, field: ComplexField2D):
         raise NotImplementedError()
 
-    def mean_free_energy_density(self, field: Field2D):
+    def mean_free_energy_density(self, field: ComplexField2D):
         return np.mean(self.free_energy_density(field))
-
-
-# A Field2D equipped with a free energy functional 
-class DensityFunctionalSystem2D:
-    def __init__(self, field: Field2D, fef: FreeEnergyFunctional2D):
-        self.field = field
-        self.fef = fef 
-
-    def calc_N_tot(self):
-        return np.sum(self.field.psi) * self.field.psi.dV
-
-    def calc_mean_density(self):
-        return self.calc_N_tot() / self.field.Volume
-    
-    # the local free energy density f
-    def calc_free_energy_density(self):
-        return self.fef.free_energy_density(self.field.psi)
-
-    # the free energy F
-    def calc_free_energy(self):
-        return self.fef.free_energy(self.field.psi)
-
-    def calc_mean_free_energy_density(self):
-        return self.fef.mean_free_energy_density(self.field.psi)
-    
-    # the functional derivative of F w.r.t. psi 
-    # dF/dpsi
-    def calc_local_chemical_potential(self):
-        return self.fef.free_energy(self.field.psi)
-
-    def calc_grand_potential_density(self, mu):
-        return self.fef.free_energy_density(self.field.psi) - mu * self.field.psi
-
-    def calc_grand_potential(self, mu):
-        omega = self.calc_grand_potential_density(mu)
-        return np.sum(omega) * self.field.dV
-
-    def calc_diff(self):
-        return np.max(self.field.psi) - np.min(self.field.psi)
 
 
 

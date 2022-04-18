@@ -1,326 +1,167 @@
-import numpy as np
+from .base import pfc_base, field as fd
 from matplotlib import pyplot as plt
-from scipy.fft import fft2, ifft2
-from pprint import pprint
-import pyfftw
-import time
-import threading
-import sys
+from matplotlib.patches import Rectangle
+from matplotlib.widgets import Slider
+import matplotlib.gridspec as gridspec
+import matplotlib
+import numpy as np
 
-from util.math import fourier
+_default_colors = ['blue', 'red', 'mediumseagreen', 'magenta', 'dodgerblue', 'limegreen', 'darkslategrey', 'orange']
 
-import warnings
+class PFC:
+    def __init__(self, field: fd.RealField2D):
+        matplotlib.use('TKAgg')
+        matplotlib.style.use('fast')
 
-warnings.warn('the pfc module is deprecated, use pfc_im instead')
+        self.field = field 
+        self.age = 0
+        self.history = [] 
+        self.fef = None
+        self.current_minimizer = None
 
-class PhaseFieldCrystal2D:
-    def __init__(self, Lx, Ly, Nx, Ny):
+    def set_eps(self, eps):
+        self.fef = pfc_base.PFCFreeEnergyFunctional(eps)
 
-        self.set_dimensions(Lx, Ly, Nx, Ny, reset_psi=True)
-        self.set_psi(0)
-        self.set_params(0, 0)
-        self.set_noise(0, 0)
+    def new_mu_minimizer(self, dt, eps, mu):
+        self.fef = pfc_base.PFCFreeEnergyFunctional(eps)
+        self.current_minimizer = pfc_base.ConstantChemicalPotentialMinimizer(self.field, dt, eps, mu)
+        self.current_minimizer.set_age(self.age)
 
-        self.lock = None
+    def new_nonlocal_minimizer(self, dt, eps):
+        self.fef = pfc_base.PFCFreeEnergyFunctional(eps)
+        self.current_minimizer = pfc_base.NonlocalConservedMinimizer(self.field, dt, eps)
+        self.current_minimizer.set_age(self.age)
 
+    def evolve(self, N_steps, N_epochs):
+        if self.current_minimizer is None:
+            raise fd.MinimizerError(self.current_minimizer) 
 
-    def set_noise(self, seed, width):
+        self.current_minimizer.run_multisteps(N_steps, N_epochs)
+        self.history.append(self.current_minimizer.history)
+        self.age = self.current_minimizer.age
 
-        self.seed = seed
-        np.random.seed(self.seed)
+    def evolve_nonstop(self, N_steps, custom_keyboard_interrupt_handler=None):
+        if self.current_minimizer is None:
+            raise fd.MinimizerError(self.current_minimizer) 
+        self.current_minimizer.run_nonstop(N_steps, custom_keyboard_interrupt_handler)
+        self.history.append(self.current_minimizer.history)
+        self.age = self.current_minimizer.age
 
-        self.noise_width = width
+    def field_snapshot(self):
+        return self.field.export_state()     
 
-    def set_params(self, mu, eps):
-        self.mu = mu
-        self.eps = eps
-        print(f'[pfc] new params set, mu={mu} eps={eps}')
+    def plot_history(self, *item_names, colors=_default_colors, show=True):
 
-    def set_dimensions(self, Lx, Ly, Nx, Ny, reset_psi=True):
+        nrows = len(item_names)
+        #fig, axs = plt.subplots(nrows=nrows, ncols=1, gridspec_kw={'height_ratios': [0.5,0.5] + [10]*(nrows-3) + [1]})
 
-        self.Lx = Lx
-        self.Ly = Ly
-        self.Volume = Lx*Ly
+        plt.subplots_adjust(bottom=0.05, top=0.95, left=0.08, right=0.92)
+        outer = gridspec.GridSpec(3, 1, height_ratios=[1.5,32,2], hspace=0.1) 
+        gs_sliders = gridspec.GridSpecFromSubplotSpec(2, 1, height_ratios=[1,1], subplot_spec=outer[0], hspace=0.2)
+        gs_plots = gridspec.GridSpecFromSubplotSpec(nrows, 1, subplot_spec = outer[1], hspace=0)
+        gs_time = gridspec.GridSpecFromSubplotSpec(1, 1, subplot_spec=outer[2], hspace=0)
 
-        self.Nx = Nx
-        self.Ny = Ny
-        
-        x, kx, self.dx, self.dkx = fourier.generate_xk(Lx, Nx)
-        y, ky, self.dy, self.dky = fourier.generate_xk(Ly, Ny)
-        
-        self.X, self.Y = np.meshgrid(x, y, indexing='ij')
-        self.Kx, self.Ky = np.meshgrid(kx, ky, indexing='ij')
-        self.K2 = self.Kx**2 + self.Ky**2
-        self.K4 = self.K2**2
+        axslider1 = plt.subplot(gs_sliders[0])
+        axslider1.xaxis.tick_top()
+        axslider2 = plt.subplot(gs_sliders[1])
+        axs = [plt.subplot(cell) for cell in gs_plots]
+        axT = plt.subplot(gs_time[0])
 
-        self.Kernel = 1-2*self.K2+self.K4
-        
-        print(f'[pfc] new dimensions set, Lx={Lx} Ly={Ly} Nx={Nx} Ny={Ny}')
+        for i, item_name in enumerate(item_names):
+            ax = axs[i]
+            ax.tick_params(axis='x', direction='in', pad=-12)
+            ax.tick_params(axis='y', direction='in', pad=-13)
 
-        if reset_psi:
-            self.psi = np.zeros((Nx, Ny))
-            print(f'[pfc] resetted psi')
+            for tick in ax.get_yticklabels():
+                tick.set_ha('left')
 
-
-
-   
-    def set_psi(self, psi1, verbose=True):
-        self.psi[:,:] = psi1
-        if verbose:
-            print('[pfc] new psi set')
-
-    def load_profile_from_file(self, saved_npz):
-        file_list = saved_npz.files
-        print(f'[pfc] loading npz file, found the following data:')
-        print(f'[pfc] {file_list}')
-
-        psi = saved_npz['psi']
-
-        self.set_dimensions(saved_npz['Lx'], saved_npz['Ly'], *psi.shape)
-        self.set_params(saved_npz['mu'], saved_npz['eps'])
-        self.set_psi(saved_npz['psi'])
-        
-
-    def _evolve_k(self, dt):
-        psik = fft2(self.psi)
-        psik *= np.exp(-dt*self.Kernel)
-        self.psi = np.real(ifft2(psik))
-
-    def _evolve_x(self, dt):
-        self.psi *= np.exp(-dt * (-self.eps + self.psi**2))
-        self.psi += dt * self.mu
-
-    def _evolve_conserved_nonlocal(self, dt):
-        psi3k = fft2(self.psi**3)
-        psik = fft2(self.psi)
-
-        psik00 = psik[0,0]
-        psik *= np.exp(-dt*(self.Kernel-self.eps))
-        psik += -dt * psi3k
-        psik[0,0] = psik00
-        self.psi = np.real(ifft2(psik))
-
-
-    def _evolve_noise(self, dt):
-        self.psi += dt * np.random.normal(0, self.noise_width, size=(self.Nx, self.Ny))
-
-    # total particl number = psi integrated over all volume
-    def calc_N_tot(self):
-        return np.sum(np.real(self.psi)) * self.dx * self.dy
-
-    # local chemical potential
-    def calc_chemical_potential_density(self):
-        D2psi = ifft2(-self.K2*fft2(self.psi))
-        D4psi = ifft2(self.K4*fft2(self.psi))
-        local_mu = (1-self.eps) * self.psi + self.psi**3 + 2*D2psi + D4psi
-
-        return np.real(local_mu)
-
-    # local grand potential density
-    def calc_grand_potential_density(self):
-        return self.calc_helmholtz_density() - self.mu * self.psi
-
-    def calc_grand_potential(self):
-        return np.sum(self.calc_grand_potential_density()) * self.dx * self.dy
-    
-    # local helmholtz free energy density
-    def calc_helmholtz_density(self):
-        psi_k = fft2(self.psi)
-        psi_k_o = self.Kernel * psi_k
-        f = 1/2 * self.psi * ifft2(psi_k_o) + self.psi**4/4 - self.eps/2 * self.psi**2
-        return np.real(f)
-
-    #
-    def calc_ord_param(self):
-        return np.max(self.psi) - np.min(self.psi)
+            for j, block  in enumerate(self.history):
+                ax.plot(block.get_item('t'), block.get_item(item_name), color=colors[j%len(colors)], lw=1)
+                ax.get_xticklabels()[0].set_ha('left')
+                ax.set_ylabel(block.get_item_latex(item_name))
 
     
-    # plot psi, chemical potential density, and grand potential density
-    def plot(self, cmap='jet', plot_psi=True, plot_mu=True, plot_omega=True, lazy_factor=1):
-        plt.figure(figsize=(12.8, 9.6))
+        age_i = 0
+        for j, block in enumerate(self.history):
+            age_f = block.age
+            if j != 0:
+                age_i = self.history[j-1].age
+
+            for i, item_name in enumerate(item_names):
+                ax = axs[i] 
+                if block.get_item(item_name)[0] is None:
+                    ax.add_patch(Rectangle((age_i, -1e6), age_f-age_i, 2e6, facecolor='grey', edgecolor='none'))
+ 
+            rx, ry, rw, rh = age_i, 0, age_f-age_i, 1
+            cx, cy = rx+rw/2, ry+rh/2
+            #rect = Rectangle((rx, ry), rw, rh, facecolor='oldlace', edgecolor='k')
+            rect = Rectangle((rx, ry), rw, rh, facecolor=colors[j%len(colors)], edgecolor='none')
+            axT.add_artist(rect)
+            #axT.annotate(block.label, (cx, cy), color=colors[j%len(colors)], ha='center', va='center', fontsize=10, clip_on=True)
+            annot_alt = block.label.replace(' ', '\n', 1)
+            axT.annotate(annot_alt, (cx, cy), color='oldlace', ha='center', va='center', fontsize=10, clip_on=True)
+            #axT.text((age_i+age_f)/2, 0.5, block.minimizer.label, color=colors[j%len(colors)], ha='center', va='center',
+            #        fontsize=10, clip_on=True)
+
+        axT.set_yticks([])
+        axT.set_xlabel('$t$', fontsize=12)
+       
         
-        num_plots = plot_psi + plot_mu + plot_omega
-        index_plot = 1
+        width = 40
+        slider1 = Slider(axslider1, 't', 0, max(self.age-width, 0), valinit=0, valfmt='%.3f', color='mediumorchid')
+        slider2 = Slider(axslider2, '$\Delta t$', 1, self.age-1, valinit=self.age-1, valfmt='%.3f', color='plum')
+        axslider2.set_xticks([1, self.age/2, self.age-1])
+
+        axslider1.add_artist(axslider1.xaxis)
+        axslider2.add_artist(axslider2.xaxis)
+
+        def update1(val):
+            for i in range(nrows):
+                axs[i].set_xlim(slider1.val, slider1.val+slider2.val)
+            axT.set_xlim(slider1.val, slider1.val+slider2.val)
+
+        def update2(val):
+            for i in range(nrows):
+                axs[i].set_xlim(slider1.val, slider1.val+slider2.val)
+            axT.set_xlim(slider1.val, slider1.val+slider2.val)
+
+            slider1_max = max(self.age-slider2.val, 0) 
+            slider1_new_val = min(slider1.val, slider1_max)
+            slider1.set_val(slider1_new_val)
+            slider1.valmax = slider1_max
+            axslider1.set_xlim(0, slider1_max)
+            axslider1.set_xticks([0, slider1_max/4, slider1_max/2, slider1_max*3/4, slider1_max])
+
+        slider1.on_changed(update1)
+        slider2.on_changed(update2)
+
+        update1(0)
+        update2(width)
+        mng = plt.get_current_fig_manager()
+        mng.resize(*mng.window.maxsize())
+
+        widgets = [slider1, slider2]
+
+        plt.subplots_adjust(wspace=0.05, hspace=0.05, left=0.05, right=0.95)
+
+        if show:
+            plt.show()
+        else:
+            return axT, axs, axslider1, axslider2, widgets 
+
+    def save(self, path):
+        raise NotImplementedError()
+
+    def copy(self):
+        raise NotImplementedError()
 
 
-        LF = lazy_factor
+def load_model(path):
+    saved = np.load(path, allow_pickle=True)
+    raise NotImplementedError()
 
-        if plot_psi:
-            ax1 = plt.subplot(num_plots, 1, index_plot, title='$\\psi$')
-            cm1 = ax1.pcolormesh(self.X[::LF], self.Y[::LF], np.real(self.psi)[::LF], cmap=cmap, vmin=-1, vmax=1, shading='nearest')
-            plt.colorbar(cm1, ax=ax1, orientation='horizontal')
-            ax1.set_aspect('equal', adjustable='box')
+class PFCHistory:
+    def __init__(self):
+        self.content = []
 
-            index_plot += 1
-
-        if plot_mu:
-
-            ax2 = plt.subplot(num_plots, 1, index_plot, title='$\\mu(\\mathbf{r})-\\mu$')
-            cm2 = ax2.pcolormesh(self.X[::LF], self.Y[::LF], self.calc_chemical_potential_density()[::LF] - self.mu, cmap=cmap, vmin=-0.2, vmax=0.2, shading='nearest')
-            plt.colorbar(cm2, ax=ax2, orientation='horizontal')
-            ax2.set_aspect('equal', adjustable='box')
-
-            index_plot += 1
-
-        if plot_omega:
-
-            ax3 = plt.subplot(num_plots, 1, index_plot, title='$\\omega(\\mathbf{r})$')
-            cm3 = ax3.pcolormesh(self.X[::LF], self.Y[::LF], self.calc_grand_potential_density()[::LF], cmap=cmap, vmin=-0.1, vmax=0.1, shading='nearest')
-            plt.colorbar(cm3, ax=ax3, orientation='horizontal')
-            ax3.set_aspect('equal', adjustable='box')
-
-            index_plot += 1
-
-
-        plt.tight_layout()
-        plt.show(block=True)
-
-
-    def new_lock(self):
-        self.lock = threading.Lock()
-        return self.lock
-
-    # minimize with constant mu
-    def minimize_mu(self, dt, cycle=31, verbose=True, t0=0):
-        i = 0
-        t = t0
-        if verbose:
-
-            print(f'[pfc] ------------------------------------------------------------')
-            print(f'[pfc] minimization parameter summary:')
-            print(f'[pfc] mu={self.mu} eps={self.eps}')
-            print(f'[pfc] Lx={self.Lx} Ly={self.Ly}')
-            print(f'[pfc] Nx={self.Nx} Ny={self.Ny}')
-            print(f'[pfc] noise_seed={self.seed} noise_amplitude={self.noise_width}')
-            print(f'[pfc] dt={dt}')
-            print(f'[pfc] ------------------------------------------------------------')
-            print(f'[pfc] minimizing grand potential with constant mu={self.mu}')
-
-        while True:
-            with self.lock:
-                self._evolve_noise(dt)
-                self._evolve_x(dt/2)
-                self._evolve_k(dt)
-                self._evolve_x(dt/2)
-
-
-            t += dt
-            i += 1
-
-            if i >= cycle:
-
-                psi0 = self.calc_N_tot() / self.Volume
-                omega = self.calc_grand_potential_density()
-                Omega = np.sum(omega) * self.dx * self.dy
-                ord_param = self.calc_ord_param()
-
-                i = 0
-                sys.stdout.write(f'\r[pfc] t={t:.4f} | psi_bar={psi0:.5f} | Omega={Omega:.5f} | diff={ord_param:.5f}    ')
-        print()
-
-    # minimize with nonlocal conserved dynamics
-    def minimize_nonlocal_conserved(self, dt, cycle=31, verbose=True, t0=0):
-        i = 0
-        t = t0
-        if verbose:
-            psi0 = self.calc_N_tot() / self.Volume
-            print(f'[pfc] minimizing grand potential with nonlocal conserved dynamics')
-            print(f'[pfc] psi_bar={psi0}')
-
-        while True:
-            with self.lock:
-                self._evolve_noise(dt)
-                self._evolve_conserved_nonlocal(dt)
-
-
-            t += dt
-            i += 1
-
-            if i >= cycle:
-
-                psi0 = self.calc_N_tot() / self.Volume
-                omega = self.calc_grand_potential_density()
-                Omega = np.sum(omega) * self.dx * self.dy
-                ord_param = self.calc_ord_param()
-
-                i = 0
-                sys.stdout.write(f'\r[pfc] t={t} | psi_bar={psi0} | Omega={Omega} | diff={ord_param}    ')
-        print()
-
-
-
-
-    def run_background(self, func, args):
-        if self.lock is None:
-            self.new_lock()
-        
-        thread = threading.Thread(target=func, args=args, daemon=True)
-        thread.start()
-
-        return self.lock, thread
-
-
-
-
-
-
-class PhaseFieldCrystalExperimental(PhaseFieldCrystal2D):
-    def __init__(self, Lx, Ly, Nx, Ny):
-        super().__init__(Lx, Ly, Nx, Ny)
-        
-        self.set_energy_coeff(1, 0)
-
-    def set_energy_coeff(self, p1, p2):
-        self.p1 = p1
-        self.p2 = p2
-
-    def _evolve_x(self, dt):
-        self.psi *= np.exp(-dt * (-self.eps + self.p1*self.psi**2 + self.p2*self.psi**4))
-        self.psi += dt * self.mu
-
-
-    def calc_chemical_potential_density(self):
-        D2psi = ifft2(-self.K2*fft2(self.psi))
-        D4psi = ifft2(self.K4*fft2(self.psi))
-        local_mu = (1-self.eps) * self.psi + self.p1*self.psi**3 + self.p2*self.psi**5 + 2*D2psi + D4psi
-
-        return np.real(local_mu)
-
-
-    # local grand potential density
-    def calc_grand_potential_density(self):
-        return self.calc_helmholtz_density() - self.mu * self.psi
     
-    # local helmholtz free energy density
-    def calc_helmholtz_density(self):
-        psi_k = fft2(self.psi)
-        psi_k_o = self.Kernel * psi_k
-        f = 1/2 * self.psi * ifft2(psi_k_o) + self.p1*self.psi**4/4 + self.p2*self.psi**6/6 - self.eps/2 * self.psi**2
-        return np.real(f)
-
-    # plot psi, chemical potential density, and grand potential density
-    def plot(self, cmap='jet'):
-        plt.figure(figsize=(12.8, 9.6))
-        ax1 = plt.subplot(311, title='$\\psi$')
-        ax2 = plt.subplot(312, title='$\\mu(\\mathbf{r})-\\mu$')
-        ax3 = plt.subplot(313, title='$\\omega(\\mathbf{r})$')
-
-        cm1 = ax1.pcolormesh(self.X, self.Y, np.real(self.psi), cmap=cmap, shading='nearest')
-        ax1.set_aspect('equal', adjustable='box')
-
-        print(np.min(self.psi))
-        print(np.max(self.psi))
-        cm2 = ax2.pcolormesh(self.X, self.Y, self.calc_chemical_potential_density() - self.mu, cmap=cmap, shading='nearest')
-        ax2.set_aspect('equal', adjustable='box')
-
-        cm3 = ax3.pcolormesh(self.X, self.Y, self.calc_grand_potential_density(), cmap=cmap, vmin=-0.1, vmax=0.1, shading='nearest')
-        ax3.set_aspect('equal', adjustable='box')
-
-        plt.colorbar(cm1, ax=ax1, orientation='horizontal')
-        plt.colorbar(cm2, ax=ax2, orientation='horizontal')
-        plt.colorbar(cm3, ax=ax3, orientation='horizontal')
-        plt.tight_layout()
-        plt.show(block=True)
-
-
-
