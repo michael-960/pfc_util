@@ -750,7 +750,7 @@ class CommandLiquefy(Command):
                 param['density'] = float(extra[i+1])
                 i += 1
             else:
-                raise CommandExecutionError(f'unkonw option: {extra[i]}')
+                raise CommandExecutionError(f'unknown option: {extra[i]}')
 
             i += 1
 

@@ -286,4 +286,8 @@ class FreeEnergyFunctional2D:
         return np.mean(self.free_energy_density(field))
 
 
+class FieldOperationError(Exception):
+    def __init__(self, message):
+        super().__init__(message)
+        self.message = message
 

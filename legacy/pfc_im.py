@@ -377,7 +377,6 @@ class PhaseFieldCrystal2D:
 
         print()
 
-
     def run_background(self, func, args, kwargs=dict()):
         if self.lock is None:
             self.new_lock()

@@ -7,6 +7,7 @@ import matplotlib
 import numpy as np
 
 _default_colors = ['blue', 'red', 'mediumseagreen', 'magenta', 'dodgerblue', 'limegreen', 'darkslategrey', 'orange']
+_default_colors = ['steelblue', 'darkseagreen', 'palevioletred']
 
 class PFC:
     def __init__(self, field: fd.RealField2D):
@@ -80,8 +81,9 @@ class PFC:
                 ax.get_xticklabels()[0].set_ha('left')
                 ax.set_ylabel(block.get_item_latex(item_name))
 
-    
         age_i = 0
+        time_boxes = []
+        time_coords = []
         for j, block in enumerate(self.history):
             age_f = block.age
             if j != 0:
@@ -94,8 +96,10 @@ class PFC:
  
             rx, ry, rw, rh = age_i, 0, age_f-age_i, 1
             cx, cy = rx+rw/2, ry+rh/2
+            time_coords.append((rx, ry, rw, rh))
             #rect = Rectangle((rx, ry), rw, rh, facecolor='oldlace', edgecolor='k')
             rect = Rectangle((rx, ry), rw, rh, facecolor=colors[j%len(colors)], edgecolor='none')
+            time_boxes.append(rect)
             axT.add_artist(rect)
             #axT.annotate(block.label, (cx, cy), color=colors[j%len(colors)], ha='center', va='center', fontsize=10, clip_on=True)
             annot_alt = block.label.replace(' ', '\n', 1)
@@ -137,12 +141,47 @@ class PFC:
 
         update1(0)
         update2(width)
+
+        # tooltip
+        annot = axT.annotate("", xy=(0,0), xytext=(0,0), textcoords="offset points",
+                bbox=dict(boxstyle="round", fc="w"), arrowprops=dict(arrowstyle="->"), ha='center')
+        annot.set_visible(False)
+
+        fig = plt.gcf()
+        def update_annot(i, xpos):
+            block = self.history[i]
+            annot.set_text(block.label) 
+            annot.xy = (xpos, time_coords[i][1] + time_coords[i][3])
+            
+            annot.get_bbox_patch().set_alpha(0.9)
+
+        def on_hover(event):
+            vis = annot.get_visible()
+            if event.inaxes == axT:
+                for i, time_box in enumerate(time_boxes):
+                    cont = time_box.contains(event)
+                    if cont[0]:
+                        xpos = event.xdata
+                        update_annot(i, xpos)
+                        annot.set_visible(True)
+                        fig.canvas.draw_idle()
+                        return
+                if vis:
+                    annot.set_visible(False)
+                    fig.canvas.draw_idle()
+            else:
+                if vis:
+                    annot.set_visible(False)
+                    fig.canvas.draw_idle()
+
+
+
+        fig.canvas.mpl_connect('motion_notify_event', on_hover)
+
         mng = plt.get_current_fig_manager()
         mng.resize(*mng.window.maxsize())
-
         widgets = [slider1, slider2]
 
-        plt.subplots_adjust(wspace=0.05, hspace=0.05, left=0.05, right=0.95)
 
         if show:
             plt.show()
