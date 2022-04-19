@@ -1,4 +1,4 @@
-
+from abc import ABC
 
 class IllegalActionError(Exception):
     def __init__(self, message):
@@ -9,4 +9,5 @@ class ModifyingReadOnlyObjectError(IllegalActionError):
     def __init__(self, message, obj):
         super().__init__(message)
         self.obj = obj
+
 

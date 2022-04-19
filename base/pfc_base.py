@@ -8,6 +8,9 @@ import pyfftw
 import time
 import threading
 import sys
+from typing import List
+
+
 from util.math import fourier
 from util.common import overrides
 from .field import FreeEnergyFunctional2D, FieldMinimizer, RealField2D, NoiseGenerator2D
@@ -42,6 +45,53 @@ class PFCFreeEnergyFunctional(FreeEnergyFunctional2D):
         local_mu = (1-self.eps) * field.psi + field.psi**3 + 2*D2psi + D4psi
         return local_mu
 
+class PFCStateFunction:
+    def __init__(self, Lx, Ly, f, F, psibar, omega=None, Omega=None):
+        self.Lx = Lx
+        self.Ly = Ly
+
+        self.f = f
+        self.F = F
+        self.psibar = psibar
+
+        self.omega = omega
+        self.Omega = Omega
+
+        self.item_dict = {
+            'Lx': self.Lx,
+            'Ly': self.Ly,
+            'f': self.f,
+            'F': self.F,
+            'omega': self.omega,
+            'Omega': self.Omega,
+            'psibar': self.psibar
+        } 
+
+    def is_grand_canonical(self):
+        return not (self.omega is None)
+
+    def get_item(self, item_name):
+        if not item_name in self.item_dict.keys():
+            raise ValueError(f'{item_name} is not a valid PFC state function')
+        return self.item_dict[item_name]
+
+    def to_string(self, float_fmt='.7f', pad=1, delim='|'):
+        delim_padded = ' '*pad + delim + ' '*pad
+        items = ['Lx', 'Ly', 'f', 'F', 'omega', 'Omega', 'psibar']
+        state_func_list = []
+
+        for item_name in items:
+            item = self.item_dict[item_name]
+            if not item is None: 
+                state_func_list.append(f'{item_name}={item:{float_fmt}}')
+        return delim_padded.join(state_func_list)
+
+
+def get_latex(item_name):
+    if not item_name in _item_latex_dict.keys():
+        raise ValueError(f'{item_name} is not a valid state function function')
+    return _item_latex_dict[item_name]
+
 
 class PFCMinimizer(FieldMinimizer):
     def __init__(self, field: RealField2D, dt, eps):
@@ -67,42 +117,28 @@ class PFCMinimizer(FieldMinimizer):
     @overrides(FieldMinimizer)
     def start(self):
         super().start()
-        state_funcs = self.get_state_funcs()
-        self.history.append_state_funcs(state_funcs)
+        state_function = self.get_state_function()
+        self.history.append_state_function(self.age, state_function)
 
     @overrides(FieldMinimizer)
     def on_epoch_end(self, progress_bar: tqdm.tqdm):
-        state_funcs = self.get_state_funcs()
-        #progress_bar.set_postfix_str(self.get_state_description_str(state_funcs))
-
-        progress_bar.set_description_str(f'[{self.label}] {self.get_state_description_str(state_funcs)}')
-        self.history.append_state_funcs(state_funcs)
-
+        state_function = self.get_state_function()
+        progress_bar.set_description_str(f'[{self.label}] {state_function.to_string()}')
+        self.history.append_state_function(self.age, state_function)
 
     @overrides(FieldMinimizer)
     def on_nonstop_epoch_end(self):
-        state_funcs = self.get_state_funcs()
-        sys.stdout.write(f'\r[{self.label}] {self.get_state_description_str(state_funcs)}')
-        self.history.append_state_funcs(state_funcs)
+        state_function = self.get_state_function()
+        sys.stdout.write(f'\r[{self.label}] {state_function.to_string()}')
+        self.history.append_state_function(state_function)
 
     @overrides(FieldMinimizer)
     def end(self):
         super().end()
-        self.history.commit(self.label)
+        self.history.commit(self.label, self.field)
 
-
-    def get_state_description_str(self, state, float_fmt='.7f', pad=1, delim='|'):
-        delim_padded = ' '*pad + delim + ' '*pad
-
-        state_func_list = []
-        for st in state:
-            if not st[1] is None:
-                state_func_list.append(f'{st[0]}={st[1]:{float_fmt}}')
-
-        return delim_padded.join(state_func_list)
-
-    def get_state_funcs(self):
-        return [('t', None), ('f', None), ('F', None), ('psibar', None), ('omega', None), ('Omega', None)]
+    def get_state_function(self) -> PFCStateFunction:
+        raise NotImplementedError()
 
 
 class ConstantChemicalPotentialMinimizer(PFCMinimizer):
@@ -139,14 +175,14 @@ class ConstantChemicalPotentialMinimizer(PFCMinimizer):
         self.field.psi -= self.dt/2 * (self.field.psi**3 - self.mu)
 
     @overrides(PFCMinimizer)
-    def get_state_funcs(self):
+    def get_state_function(self):
         psibar = np.mean(self.field.psi)
         psiN = psibar * self.field.Volume
         f = self.fef.mean_free_energy_density(self.field)
         F = self.fef.free_energy(self.field)
         omega = f - self.mu * psibar
         Omega = F - self.mu * psiN
-        return [('t', self.age), ('f', f), ('F', F), ('psibar', psibar), ('omega', omega), ('Omega', Omega)]
+        return PFCStateFunction(self.field.Lx, self.field.Ly, f, F, psibar, omega, Omega)
 
 
 class NonlocalConservedMinimizer(PFCMinimizer):
@@ -180,14 +216,13 @@ class NonlocalConservedMinimizer(PFCMinimizer):
         self.field.psi_k *= self._exp_dt_kernel
         self.field.psi_k[0,0] = psik00
         self.field.ifft2()
-
         
     @overrides(PFCMinimizer)
-    def get_state_funcs(self):
+    def get_state_function(self):
         psibar = np.mean(self.field.psi)
         f = self.fef.mean_free_energy_density(self.field)
         F = self.fef.free_energy(self.field)
-        return [('t', self.age), ('f', f), ('F', F), ('psibar', psibar), ('omega', None), ('Omega', None)]
+        return PFCStateFunction(self.field.Lx, self.field.Ly, f, F, psibar)
 
 
 class StressRelaxer(PFCMinimizer):
@@ -198,62 +233,55 @@ class StressRelaxer(PFCMinimizer):
 class PFCMinimizerHistory:
     def __init__(self):
         self.t = []
-        self.f = []
-        self.F = []
-        self.omega = []
-        self.Omega = []
-        self.psibar = []
+        self.state_functions = []
         self.age = 0
         self.label = 'NULL'
-
-        self.item_dict = {
-            't': (r'$t$', self.t),
-            'f': (r'$f$', self.f),
-            'F': (r'$F$', self.F),
-            'omega': (r'$\omega$', self.omega),
-            'Omega': (r'$\Omega$', self.Omega),
-            'psibar': (r'$\bar\psi$', self.psibar) } 
-
+        self.final_field_state = None
         self.committed = False 
 
-    def append(self, t, f, F, psibar, omega=None, Omega=None):
-        if not self.committed:
-            self.t.append(t)
-            self.f.append(f)
-            self.F.append(F)
-            self.omega.append(omega)
-            self.Omega.append(Omega)
-            self.psibar.append(psibar)
-            self.age = t
-        else:
+    def append_state_function(self, t, sf: PFCStateFunction):
+        if self.committed:
             raise ModifyingReadOnlyObjectError(
             f'history object (labe=\'{self.label}\') is already committed and hence not editable', self)
 
-    def append_state_funcs(self, sf):
-        self.append(sf[0][1], sf[1][1], sf[2][1], sf[3][1], sf[4][1], sf[5][1])
+        if t < self.age:
+            raise IllegalActionError(f'time={t} is smaller than the current recorded time')
 
-    def commit(self, label):
+        self.t.append(t)
+        self.state_functions.append(sf)
+        self.age = t
+
+    def commit(self, label, field: RealField2D):
+        if self.committed:
+            raise IllegalActionError(f'history object (label=\'{self.label}\') is already committed')
+
+        self.label = label
+        self.committed = True 
+        self.final_field_state = field.export_state()
+
+    def is_committed(self):
+        return self.committed
+
+    def get_t(self):
+        return self.t
+
+    def get_state_functions(self) -> List[PFCStateFunction]:
+        return self.state_functions
+
+    def get_final_field_state(self):
         if not self.committed:
-            self.label = label
-            self.committed = True 
-        else:
-            raise IllegalActionError(f'history object (label=\'{self.label}\') is already comitted')
+            raise IllegalActionError('cannot get final state from uncommitted PFC minimizer history')
+        return self.final_field_state
 
-    def get_item(self, item_name):
-        if not item_name in self.item_dict.keys():
-            raise ValueError(f'{item_name} is not a valid PFC minimizer history item')
-        return self.item_dict[item_name][1]
-
-    def get_item_latex(self, item_name):
-        if not item_name in self.item_dict.keys():
-            raise ValueError(f'{item_name} is not a valid history item')
-        return self.item_dict[item_name][0]
+    def get_label(self):
+        return self.label
 
     def export_state(self):
         if self.commited:
             state = self.item_dict
             state['age'] = self.age
             state['label'] = self.label
+            state['final_state'] = self.final_state
             return state
         else:
             raise IllegalActionError(
@@ -268,6 +296,16 @@ def import_state(state):
     h.commit(state['label'])
     return h
 
+
+_item_latex_dict = {
+    'Lx': r'$Lx$',
+    'Ly': r'$Ly$',
+    'f': r'$f$',
+    'F': r'$F$',
+    'omega': r'$\omega$',
+    'Omega': r'$\Omega$',
+    'psibar': r'$\bar\psi$'
+} 
 
 
 

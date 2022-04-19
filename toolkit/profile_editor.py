@@ -34,6 +34,3 @@ def periodic_extend(psi, Mx, My):
 
 
 
-
-
-
