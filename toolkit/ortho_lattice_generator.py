@@ -13,6 +13,7 @@ def generate(na, nb):
 
     return theta, Lx, Ly
 
+
 def harmonic(theta, x, y):
     k1 = (np.cos(theta), np.sin(theta))
     k2 = (np.cos(theta+2*np.pi/3), np.sin(theta+2*np.pi/3))

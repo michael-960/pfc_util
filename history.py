@@ -1,7 +1,8 @@
 from .base import field_util
 from .base.field import RealField2D
-from .base.pfc_base import PFCMinimizerHistory, PFCStateFunction, get_latex
-from .base.common import IllegalActionError
+from .base import field as fd
+from .base.pfc_base import PFCMinimizerHistory, PFCStateFunction, get_latex, import_minimizer_history
+from .base.common import IllegalActionError, with_type
 from typing import List, Dict
 
 from matplotlib import pyplot as plt
@@ -13,6 +14,7 @@ import numpy as np
 
 
 _default_colors = ['steelblue', 'darkseagreen', 'palevioletred']
+
 
 class PFCHistoryBlock:
     def __init__(self):
@@ -42,15 +44,13 @@ class PFCHistoryBlock:
     def get_t(self) -> List[float]:
         raise NotImplementedError()
 
+    def export(self):
+        raise NotImplementedError()
+
 class PFCInitialHistoryBlock(PFCHistoryBlock):
     def __init__(self, field: RealField2D, label):
         self.label = label
-
-    def export_state(self):
-        pass
-
-    def import_state(self):
-        pass 
+        self.field = field
 
     def get_label(self):
         return self.label
@@ -62,7 +62,7 @@ class PFCInitialHistoryBlock(PFCHistoryBlock):
         return 0 
 
     def get_final_field_state(self):
-        return field.export_state()
+        return self.field.export_state()
 
     def get_state_functions(self):
         raise IllegalActionError('there is no state functions associated with an edit action')
@@ -70,6 +70,12 @@ class PFCInitialHistoryBlock(PFCHistoryBlock):
     def get_t(self):
         raise IllegalActionError('there is no time associated with an edit action')
 
+    @with_type('initial')
+    def export(self):
+        return {
+            'label': self.label,
+            'field': self.field.export_state()
+        }
 
 
 class PFCMinimizerHistoryBlock(PFCHistoryBlock):
@@ -96,12 +102,6 @@ class PFCMinimizerHistoryBlock(PFCHistoryBlock):
 
         self.t = np.array(self.minimizer_history.t)
 
-    def export_state(self):
-        pass
-
-    def import_state(self):
-        pass
-
     def get_label(self):
         return self.minimizer_history.label
 
@@ -120,16 +120,16 @@ class PFCMinimizerHistoryBlock(PFCHistoryBlock):
     def get_t(self):
         return self.t
 
+    @with_type('minimizer')
+    def export(self) -> dict:
+        state = {'minimizer_history': self.minimizer_history.export()}
+        return state
+
 
 class PFCEditActionHistoryBlock(PFCHistoryBlock):
     def __init__(self):
         pass
 
-    def export_state(self):
-        pass
-
-    def import_state(self):
-        pass 
     def get_label(self):
         pass
 
@@ -148,10 +148,40 @@ class PFCEditActionHistoryBlock(PFCHistoryBlock):
     def get_t(self):
         raise IllegalActionError('there is no time associated with an edit action')
 
+    @with_type('edit_action')
+    def export(self) -> dict:
+        raise NotImplementedError()
+
+
+def import_initial_history_block(state: dict) -> PFCInitialHistoryBlock:
+    block = PFCInitialHistoryBlock(fd.import_field(state['field']), state['label'])
+    return block
+
+
+def import_minimizer_history_block(state: dict) -> PFCMinimizerHistoryBlock:
+    minimizer_history = import_minimizer_history(state['minimizer_history'])
+    block = PFCMinimizerHistoryBlock(minimizer_history)
+    return block
+
+
+def import_edit_action_history_block(state: dict) -> PFCEditActionHistoryBlock:
+    raise NotImplementedError()
+
+
+def import_history_block(state: dict) -> PFCHistoryBlock:
+    if state['type'] == 'minimizer':   
+        return import_minimizer_history_block(state)
+    if state['type'] == 'initial': 
+        return import_initial_history_block(state)
+    if state['type'] == 'edit_action':   
+        return import_edit_action_history_block(state)
+
+    raise ValueError(f'{state["type"]} is not a valid history block type')
+
+
 
 class PFCHistory:
     def __init__(self, field: RealField2D):
-        self.initial_state = field.export_state()
         self.blocks = []
         self.age_record = []
         self.append(PFCInitialHistoryBlock(field, 'loaded profile'))
@@ -188,9 +218,6 @@ class PFCHistory:
             return 0, 0
         return self.age_record[i-1], self.age_record[i]
 
-    def get_initial_field_state(self):
-        return self.initial_state
-
     # initial field state of blocks[i]
     def get_field_state(self, i):
         if i == 0:
@@ -199,6 +226,8 @@ class PFCHistory:
 
     def plot(self, *item_names, colors=_default_colors, start=0, end=-1, show=True):
         nrows = len(item_names)
+        if nrows == 0:
+            raise ValueError('cannot plot history with zero items')
 
         plt.subplots_adjust(bottom=0.05, top=0.95, left=0.08, right=0.92)
         outer = gridspec.GridSpec(3, 1, height_ratios=[1.5,32,2], hspace=0.1) 
@@ -355,7 +384,19 @@ class PFCHistory:
         else:
             return axT, axs, axslider1, axslider2, widgets 
 
+    def export(self):
+        return {
+            'blocks': [block.export() for block in self.blocks],
+            'age_record': self.age_record,
+        }
 
 
+def import_history(state: dict) -> PFCHistory:
+    initial_field = import_initial_history_block(state['blocks'][0]).field
+    pfc_history = PFCHistory(initial_field)
 
+    pfc_history.blocks = [import_history_block(block_state) for block_state in state['blocks']]
+    pfc_history.age_record = state['age_record']
+
+    return pfc_history
 

@@ -13,7 +13,7 @@ from typing import List
 
 from util.math import fourier
 from util.common import overrides
-from .field import FreeEnergyFunctional2D, FieldMinimizer, RealField2D, NoiseGenerator2D
+from .field import FreeEnergyFunctional2D, FieldMinimizer, RealField2D, NoiseGenerator2D, import_field
 from .common import ModifyingReadOnlyObjectError, IllegalActionError
 
 
@@ -86,6 +86,13 @@ class PFCStateFunction:
                 state_func_list.append(f'{item_name}={item:{float_fmt}}')
         return delim_padded.join(state_func_list)
 
+    def export(self) -> str:
+        return self.item_dict
+
+
+def import_state_function(state: dict) -> PFCStateFunction:
+    sf = PFCStateFunction(state['Lx'], state['Ly'], state['f'], state['F'], state['psibar'], state['omega'], state['Omega'])
+    return sf
 
 def get_latex(item_name):
     if not item_name in _item_latex_dict.keys():
@@ -276,25 +283,29 @@ class PFCMinimizerHistory:
     def get_label(self):
         return self.label
 
-    def export_state(self):
-        if self.commited:
-            state = self.item_dict
+    def export(self) -> dict:
+        if self.committed:
+            state = dict()
             state['age'] = self.age
             state['label'] = self.label
-            state['final_state'] = self.final_state
+            state['final_field_state'] = self.final_field_state
+            state['state_functions'] = [sf.export() for sf in self.state_functions]
+            state['t'] = self.t
             return state
         else:
             raise IllegalActionError(
-            'history object (label=\'{self.label}\') has not been commited and is therefore not ready to be exported')
+            'history object (label=\'{self.label}\') has not been committed and is therefore not ready to be exported')
 
 
-def import_state(state):
-    h = PFCMinimizerHistory()
-    for i in range(state['t']):
-        h.append(state['t'][i], state['f'][i], state['F'][i], state['psibar'][i], state['omega'][i], state['Omega'][i])
-
-    h.commit(state['label'])
-    return h
+def import_minimizer_history(state: dict) -> PFCMinimizerHistory:
+    mh = PFCMinimizerHistory()
+    mh.label = state['label']
+    mh.state_functions = [import_state_function(sf_state) for sf_state in state['state_functions']]
+    mh.age = state['age']
+    mh.final_field_state = state['final_field_state']
+    mh.t = state['t']
+    mh.committed = True
+    return mh
 
 
 _item_latex_dict = {

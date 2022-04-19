@@ -1,6 +1,7 @@
 from .base import pfc_base, field as fd
 from .base.common import IllegalActionError
-from .history import PFCHistory, PFCMinimizerHistoryBlock, PFCEditActionHistoryBlock
+from .history import PFCHistory, PFCMinimizerHistoryBlock, PFCEditActionHistoryBlock, import_history
+
 from matplotlib import pyplot as plt
 from matplotlib.patches import Rectangle
 from matplotlib.widgets import Slider
@@ -20,22 +21,14 @@ class PFC:
         self.age = 0
         self.history= PFCHistory(self.field)
 
-        self.fef = None
-        self.current_minimizer = None
         self.history_pointer = 0
-
-    def set_eps(self, eps):
-        self.fef = pfc_base.PFCFreeEnergyFunctional(eps)
+        self.current_minimizer = None
 
     def new_mu_minimizer(self, dt, eps, mu):
-        self.set_eps(eps)
         self.current_minimizer = pfc_base.ConstantChemicalPotentialMinimizer(self.field, dt, eps, mu)
-        #self.current_minimizer.set_age(self.age)
 
     def new_nonlocal_minimizer(self, dt, eps):
-        self.set_eps(eps)
         self.current_minimizer = pfc_base.NonlocalConservedMinimizer(self.field, dt, eps)
-        #self.current_minimizer.set_age(self.age)
 
     def evolve(self, N_steps, N_epochs):
         if self.current_minimizer is None:
@@ -46,7 +39,7 @@ class PFC:
         self.history_pointer += 1
         self.age += self.current_minimizer.age
         self.history.cut_and_insert(PFCMinimizerHistoryBlock(self.current_minimizer.history), self.history_pointer)
-
+        self.current_minimizer = None
 
     def evolve_nonstop(self, N_steps, custom_keyboard_interrupt_handler=None):
         if self.current_minimizer is None:
@@ -57,19 +50,15 @@ class PFC:
         self.history_pointer += 1
         self.age += self.current_minimizer.age
         self.history.cut_and_insert(PFCMinimizerHistoryBlock(self.current_minimizer.history), self.history_pointer)
-
+        self.current_minimizer = None
 
     def field_snapshot(self):
         return self.field.export_state()     
 
     def plot_history(self, *item_names, show=True):
+        if len(item_names) == 0:
+            item_names = ['f', 'psibar']
         return self.history.plot(*item_names, start=0, end=self.history_pointer, show=show)
-
-    def save(self, path):
-        raise NotImplementedError()
-    
-    def export(self):
-        pass
     
     def undo(self):
         if self.history_pointer <= 0:
@@ -90,11 +79,36 @@ class PFC:
         field_state = self.history.get_block(self.history_pointer).get_final_field_state()
         self.field.set_psi(field_state['psi'])
         self.field.set_size(field_state['Lx'], field_state['Ly'])
+    
+    def export(self):
+        state = dict()
+        state['history'] = self.history.export()
+        state['age'] = self.age
+        state['history_pointer'] = self.history_pointer
+        state['field'] = self.field.export_state()
+
+        return state
 
 
-def load_model(path):
+
+def import_pfc_model(state: dict) -> PFC:
+    history_state = state['history']
+    field_state = state['field']
+    pfc_history = import_history(history_state) 
+    field = fd.import_field(field_state)
+    pfc_model = PFC(field)
+
+    pfc_model.age = state['age']
+    pfc_model.history_pointer = state['history_pointer']
+    pfc_model.history = import_history(state['history'])
+
+    return pfc_model
+
+
+
+def load_pfc_model(path: str) -> PFC:
     saved = np.load(path, allow_pickle=True)
-    raise NotImplementedError()
+    return import_pfc_model(saved)
 
 
    

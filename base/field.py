@@ -139,12 +139,11 @@ class RealField2D(ComplexField2D):
             self.yell('new psi set')
 
 
-def load(filepath, is_complex=False):
+def load_field(filepath, is_complex=False):
     state = np.load(filepath)
-    return import_state(state, is_complex=False)
+    return import_field(state, is_complex=False)
 
-
-def import_state(state, is_complex=False):
+def import_field(state, is_complex=False):
     psi = state['psi']
     Lx = state['Lx']
     Ly = state['Ly']
