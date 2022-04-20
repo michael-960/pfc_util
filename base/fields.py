@@ -30,7 +30,7 @@ class ComplexField2D:
             self.yell(f'new resolution set, Nx={Nx} Ny={Ny}')
             self.yell(f'reset profile, Lx={Lx} Ly={Ly} Nx={Nx} Ny={Ny}')
 
-    def set_size(self, Lx, Ly, verbose=False):
+    def set_size(self, Lx, Ly):
         self.Lx = Lx
         self.Ly = Ly
         self.Volume = Lx*Ly
@@ -39,13 +39,16 @@ class ComplexField2D:
         self.X, self.Y = np.meshgrid(x, y, indexing='ij')
         self.Kx, self.Ky = np.meshgrid(kx, ky, indexing='ij')
 
-        self.K2 = self.Kx**2 + self.Ky**2
+        self.Kx2 = self.Kx**2
+        self.Ky2 = self.Ky**2
+
+        self.Kx4 = self.Kx2**2
+        self.Ky4 = self.Ky2**2
+
+        self.K2 = self.Kx2 + self.Ky2
         self.K4 = self.K2**2
         self.K6 = self.K2 * self.K4
 
-        if verbose:
-            self.yell(f'new dimensions set, Lx={Lx} Ly={Ly}') 
-            self.yell(f'k-space dimensions {self.K4.shape}')
     
     def initialize_fft(self, **fftwargs):
         psi_tmp = self.psi.copy()
@@ -118,7 +121,13 @@ class RealField2D(ComplexField2D):
         self.X, self.Y = np.meshgrid(x, y, indexing='ij')
         self.Kx, self.Ky = np.meshgrid(kx, ky, indexing='ij')
 
-        self.K2 = self.Kx**2 + self.Ky**2
+        self.Kx2 = self.Kx**2
+        self.Ky2 = self.Ky**2
+
+        self.Kx4 = self.Kx2**2
+        self.Ky4 = self.Ky2**2
+
+        self.K2 = self.Kx2 + self.Ky2
         self.K4 = self.K2**2
         self.K6 = self.K2 * self.K4
 

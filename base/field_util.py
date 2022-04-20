@@ -1,4 +1,4 @@
-from .field import ComplexField2D, RealField2D, FieldOperationError
+from .fields import ComplexField2D, RealField2D, FieldOperationError
 from matplotlib import pyplot as plt
 import numpy as np
 from typing import List

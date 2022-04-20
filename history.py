@@ -1,6 +1,7 @@
 from .base import field_util
-from .base.field import RealField2D
-from .base import field as fd
+from .base import fields as fd
+
+from .base.fields import RealField2D
 from .base.pfc_base import PFCMinimizerHistory, PFCStateFunction, get_latex, import_minimizer_history
 from .base.common import IllegalActionError, with_type
 from typing import List, Dict
@@ -13,7 +14,7 @@ import matplotlib.gridspec as gridspec
 import numpy as np
 
 
-_default_colors = ['steelblue', 'darkseagreen', 'palevioletred']
+_default_colors = ['steelblue', 'darkseagreen', 'palevioletred', 'burlywood']
 
 
 class PFCHistoryBlock:
@@ -101,9 +102,10 @@ class PFCMinimizerHistoryBlock(PFCHistoryBlock):
                 self.state_functions[item_name].append(sf.get_item(item_name))
 
         self.t = np.array(self.minimizer_history.t)
+        self.label = minimizer_history.get_label()
 
     def get_label(self):
-        return self.minimizer_history.label
+        return self.label
 
     def get_final_field_state(self):
         return self.minimizer_history.get_final_field_state()
@@ -122,7 +124,7 @@ class PFCMinimizerHistoryBlock(PFCHistoryBlock):
 
     @with_type('minimizer')
     def export(self) -> dict:
-        state = {'minimizer_history': self.minimizer_history.export()}
+        state = {'minimizer_history': self.minimizer_history.export(), 'label': self.label}
         return state
 
 
@@ -232,7 +234,7 @@ class PFCHistory:
         plt.subplots_adjust(bottom=0.05, top=0.95, left=0.08, right=0.92)
         outer = gridspec.GridSpec(3, 1, height_ratios=[1.5,32,2], hspace=0.1) 
         gs_sliders = gridspec.GridSpecFromSubplotSpec(2, 1, height_ratios=[1,1], subplot_spec=outer[0], hspace=0.2)
-        gs_plots = gridspec.GridSpecFromSubplotSpec(nrows, 1, subplot_spec = outer[1], hspace=0)
+        gs_plots = gridspec.GridSpecFromSubplotSpec(nrows, 1, subplot_spec = outer[1], hspace=0.1)
         gs_time = gridspec.GridSpecFromSubplotSpec(1, 1, subplot_spec=outer[2], hspace=0)
 
         axslider1 = plt.subplot(gs_sliders[0])
@@ -247,6 +249,8 @@ class PFCHistory:
         if end < 0:
             end = len(self.get_blocks()) + end
 
+
+        color_index = 0
         for j, block in enumerate(self.get_blocks()):
             if j < start or j > end:
                 continue
@@ -254,8 +258,9 @@ class PFCHistory:
             age_i, age_f = self.get_block_age_lim(j)
             rx, ry, rw, rh = age_i, 0, age_f-age_i, 1
             cx, cy = rx+rw/2, ry+rh/2
-            rect = Rectangle((rx, ry), rw, rh, facecolor=colors[j%len(colors)], edgecolor='none')
 
+
+            rect = Rectangle((rx, ry), rw, rh, facecolor=colors[color_index%len(colors)], edgecolor='none')
             time_coords.append((rx, ry, rw, rh))
             time_boxes.append(rect)
 
@@ -263,40 +268,48 @@ class PFCHistory:
                 sfs = block.get_state_functions()
                 t = block.get_t() 
                 
+
                 axT.add_artist(rect)
                 annot_alt = block.get_label().replace(' ', '\n', 1)
                 axT.annotate(annot_alt, (cx, cy), color='oldlace', ha='center', va='center', fontsize=10, clip_on=True)
 
+
                 for i, item_name in enumerate(item_names):
                     ax = axs[i]
-                    ax.plot(t+age_i, sfs[item_name], color=colors[j%len(colors)], lw=1)
+                    ax.plot(t+age_i, sfs[item_name], color=colors[color_index%len(colors)], lw=1)
                     ax.set_ylabel(get_latex(item_name))
+                    
+                    ax.plot([age_i, age_i], [-1e2, 1e2], lw=1, linestyle=':', color='k')
 
                     if sfs[item_name][0] is None:
-                        ax.add_patch(Rectangle((age_i, -1e6), age_f-age_i, 2e6, facecolor='grey', edgecolor='none'))
+                        ax.add_patch(Rectangle((age_i, -1e2), age_f-age_i, 2e2, facecolor='grey', edgecolor='none'))
+
+                color_index += 1
 
             else:
                 pass
 
         for i, item_name in enumerate(item_names):
-            axs[i].tick_params(axis='x', direction='in', pad=-12)
-            axs[i].tick_params(axis='y', direction='in', pad=-13)
-            axs[i].get_xticklabels()[0].set_ha('left')
+            #axs[i].tick_params(axis='x', direction='in', pad=-12)
+            #axs[i].tick_params(axis='y', direction='in', pad=-13)
+            #axs[i].get_xticklabels()[0].set_ha('left')
             
             ymin = 1e4
             ymax = -1e4
-            for line in axs[i].get_lines():
-                ydata = line.get_ydata()
-                if None in ydata:
-                    continue
-                ymin = min(np.min(ydata), ymin)
-                ymax = max(np.max(ydata), ymax)
+            for j, block in enumerate(self.get_blocks()): 
+                if block.has_span():
+                    ydata = block.get_state_functions()[item_name]
+                    if None in ydata:
+                        continue
+                    ymin = min(np.min(ydata), ymin)
+                    ymax = max(np.max(ydata), ymax)
             
             ydelta = ymax - ymin
             axs[i].set_ylim(ymin - ydelta*0.05, ymax + ydelta*0.05)
 
             for tick in axs[i].get_yticklabels():
-                tick.set_ha('left')
+                pass
+                #tick.set_ha('left')
 
 
         axT.set_yticks([])
@@ -307,26 +320,39 @@ class PFCHistory:
         age_start = self.get_block_age_lim(start)[0]
         age_end = self.get_block_age_lim(end)[1]
         age_range = age_end - age_start
+        
 
-        slider1 = Slider(axslider1, 't', age_start, age_start+1, valinit=age_start, valfmt='%.3f', color='mediumorchid')
-        slider2 = Slider(axslider2, '$\Delta t$', 1, age_range-1, valinit=age_range-1, valfmt='%.3f', color='plum')
-        axslider2.set_xticks([1, age_range/2, age_range-1])
+        max_width = 150
+        zoom_i = 1e-6
+        zoom_f = 100-1e-6
+        slider2_init = min(max(zoom_i, 100 * (1-max_width/age_range)), zoom_f)
+
+        width = age_range * (100-slider2_init) / 100
+
+        slider1 = Slider(axslider1, '$t$', age_start, age_start+width, valinit=age_start, valfmt='%.3f', color='mediumorchid')
+        slider2 = Slider(axslider2, 'zoom', zoom_i, zoom_f, valinit=slider2_init, valfmt=f'%.3f%%', color='plum')
+
+        axslider2.set_xticks([zoom_i, zoom_f], ['-', '+'])
 
         axslider1.add_artist(axslider1.xaxis)
         axslider2.add_artist(axslider2.xaxis)
 
         def update1(val):
+            width = age_range * (100-slider2.val) / 100
             for i in range(nrows):
-                axs[i].set_xlim(slider1.val, slider1.val+slider2.val)
-            axT.set_xlim(slider1.val, slider1.val+slider2.val)
+                axs[i].set_xlim(slider1.val, slider1.val+width)
+            axT.set_xlim(slider1.val, slider1.val + width)
 
         def update2(val):
+            width = age_range * (100-slider2.val) / 100
             for i in range(nrows):
-                axs[i].set_xlim(slider1.val, slider1.val+slider2.val)
-            axT.set_xlim(slider1.val, slider1.val+slider2.val)
+                axs[i].set_xlim(slider1.val, slider1.val+width)
+            axT.set_xlim(slider1.val, slider1.val + width)
 
-            slider1_max = max(age_end-slider2.val, age_start) 
+            slider1_max = max(age_end-width, age_start) 
+
             slider1_new_val = min(slider1.val, slider1_max)
+
             slider1.set_val(slider1_new_val)
             slider1.valmax = slider1_max
             axslider1.set_xlim(age_start, slider1_max)
@@ -338,7 +364,7 @@ class PFCHistory:
         slider2.on_changed(update2)
 
         update1(age_start)
-        update2(age_range-1)
+        update2(slider2_init)
 
         # tooltip
         annot = axT.annotate("", xy=(0,0), xytext=(0,0), textcoords="offset points",

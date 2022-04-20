@@ -1,16 +1,17 @@
-from .base import pfc_base, field as fd
-from .base.common import IllegalActionError
+from .base import pfc_base, fields as fd
+from .base.common import IllegalActionError, scalarize
 from .history import PFCHistory, PFCMinimizerHistoryBlock, PFCEditActionHistoryBlock, import_history
 
+from typing import Optional, Union, Callable
 from matplotlib import pyplot as plt
 from matplotlib.patches import Rectangle
 from matplotlib.widgets import Slider
 import matplotlib.gridspec as gridspec
 import matplotlib
 import numpy as np
+import warnings
 
-#_default_colors = ['blue', 'red', 'mediumseagreen', 'magenta', 'dodgerblue', 'limegreen', 'darkslategrey', 'orange']
-_default_colors = ['steelblue', 'darkseagreen', 'palevioletred']
+
 
 class PFC:
     def __init__(self, field: fd.RealField2D):
@@ -30,7 +31,10 @@ class PFC:
     def new_nonlocal_minimizer(self, dt, eps):
         self.current_minimizer = pfc_base.NonlocalConservedMinimizer(self.field, dt, eps)
 
-    def evolve(self, N_steps, N_epochs):
+    def new_stress_relaxer(self, dt, eps, mu):
+        self.current_minimizer = pfc_base.StressRelaxer(self.field, dt, eps, mu)
+
+    def evolve_multisteps(self, N_steps, N_epochs):
         if self.current_minimizer is None:
             raise fd.MinimizerError(self.current_minimizer) 
 
@@ -51,6 +55,41 @@ class PFC:
         self.age += self.current_minimizer.age
         self.history.cut_and_insert(PFCMinimizerHistoryBlock(self.current_minimizer.history), self.history_pointer)
         self.current_minimizer = None
+
+    def evolve(self, minimizer: str, dt: float, eps: float, mu: Optional[float]=None,
+               N_steps: int=31, N_epochs:Optional[int]=None,
+               custom_keyboard_interrupt_handler: Optional[Callable[[pfc_base.PFCMinimizer], bool]]=None):
+
+        if not minimizer in ['mu', 'nonlocal', 'relax']:
+            raise ValueError(f'{minimizer} is not a valid minimizer')
+
+        if N_steps <= 0:
+            raise ValueError(f'N_steps must be a positive integer')
+        
+
+        if minimizer == 'mu':
+            if mu is None:
+                raise ValueError(f'chemical potential must be specified with constant chemical potential minimizer')
+            self.new_mu_minimizer(dt, eps, mu)
+        if minimizer == 'nonlocal':
+            if not (mu is None):
+                warnings.warn(f'chemical potential will be ignored for nonlocal conserved minimizer')
+            self.new_nonlocal_minimizer(dt, eps)
+
+        if minimizer == 'relax':
+            if mu is None:
+                raise ValueError(f'chemical potential must be specified with constant stress relaxer')
+            self.new_stress_relaxer(dt, eps, mu)
+
+
+        if N_epochs is None:
+            self.evolve_nonstop(N_steps, custom_keyboard_interrupt_handler=custom_keyboard_interrupt_handler)
+        else:
+            if N_epochs <=0:
+                raise ValueError(f'N_epochs must be a positive integer')
+            self.evolve_multisteps(N_steps, N_epochs)
+
+                
 
     def field_snapshot(self):
         return self.field.export_state()     
@@ -80,7 +119,7 @@ class PFC:
         self.field.set_psi(field_state['psi'])
         self.field.set_size(field_state['Lx'], field_state['Ly'])
     
-    def export(self):
+    def export(self) -> dict:
         state = dict()
         state['history'] = self.history.export()
         state['age'] = self.age
@@ -88,27 +127,34 @@ class PFC:
         state['field'] = self.field.export_state()
 
         return state
+    
+    def save(self, path):
+        state = self.export()
+        np.savez(path, state=state)
 
+    def save_hdf5(self, path):
+        state = self.export()
 
 
 def import_pfc_model(state: dict) -> PFC:
     history_state = state['history']
     field_state = state['field']
+
     pfc_history = import_history(history_state) 
     field = fd.import_field(field_state)
+
     pfc_model = PFC(field)
 
     pfc_model.age = state['age']
     pfc_model.history_pointer = state['history_pointer']
-    pfc_model.history = import_history(state['history'])
+    pfc_model.history = pfc_history 
 
     return pfc_model
 
 
-
 def load_pfc_model(path: str) -> PFC:
-    saved = np.load(path, allow_pickle=True)
-    return import_pfc_model(saved)
+    data = np.load(path, allow_pickle=True)
+    return import_pfc_model(scalarize(data['state']))
 
 
    
