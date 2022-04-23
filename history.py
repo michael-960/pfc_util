@@ -2,8 +2,11 @@ from .base import field_util
 from .base import fields as fd
 
 from .base.fields import RealField2D
-from .base.pfc_base import PFCMinimizerHistory, PFCStateFunction, get_latex, import_minimizer_history
+from .pfc_core.base import PFCStateFunction, get_latex
+from .pfc_core.evolution import PFCMinimizerHistory, import_minimizer_history
+
 from .base.common import IllegalActionError, with_type
+
 from typing import List, Dict
 
 from matplotlib import pyplot as plt

@@ -1,4 +1,7 @@
-from .base import pfc_base, fields as fd
+from .base import fields as fd
+
+from .pfc_core.evolution import ConstantChemicalPotentialMinimizer, NonlocalConservedMinimizer, StressRelaxer, PFCMinimizer
+
 from .base.common import IllegalActionError, scalarize
 from .history import PFCHistory, PFCMinimizerHistoryBlock, PFCEditActionHistoryBlock, import_history
 
@@ -25,19 +28,23 @@ class PFC:
         self.history_pointer = 0
         self.current_minimizer = None
 
+    def new_minimizer(self, minimizer: PFCMinimizer):
+        self.current_minimizer = minimizer
+
     def new_mu_minimizer(self, dt, eps, mu):
-        self.current_minimizer = pfc_base.ConstantChemicalPotentialMinimizer(self.field, dt, eps, mu)
+        self.current_minimizer = ConstantChemicalPotentialMinimizer(self.field, dt, eps, mu)
 
     def new_nonlocal_minimizer(self, dt, eps):
-        self.current_minimizer = pfc_base.NonlocalConservedMinimizer(self.field, dt, eps)
+        self.current_minimizer = NonlocalConservedMinimizer(self.field, dt, eps)
 
     def new_stress_relaxer(self, dt, eps, mu):
-        self.current_minimizer = pfc_base.StressRelaxer(self.field, dt, eps, mu)
+        self.current_minimizer = StressRelaxer(self.field, dt, eps, mu)
 
-    def evolve_multisteps(self, N_steps, N_epochs):
+    def evolve_multisteps(self, N_steps, N_epochs, display_precision: int=7):
         if self.current_minimizer is None:
             raise fd.MinimizerError(self.current_minimizer) 
 
+        self.current_minimizer.set_display_precision(display_precision)
         self.current_minimizer.run_multisteps(N_steps, N_epochs)
 
         self.history_pointer += 1
@@ -45,11 +52,13 @@ class PFC:
         self.history.cut_and_insert(PFCMinimizerHistoryBlock(self.current_minimizer.history), self.history_pointer)
         self.current_minimizer = None
 
-    def evolve_nonstop(self, N_steps, custom_keyboard_interrupt_handler=None):
+    def evolve_nonstop(self, N_steps, custom_keyboard_interrupt_handler=None, display_precision: int=7):
         if self.current_minimizer is None:
             raise fd.MinimizerError(self.current_minimizer) 
 
-        self.current_minimizer.run_nonstop(N_steps, custom_keyboard_interrupt_handler)
+
+        self.current_minimizer.set_display_precision(display_precision)
+        self.current_minimizer.run_nonstop(N_steps, custom_keyboard_interrupt_handler, display_precision=display_precision)
 
         self.history_pointer += 1
         self.age += self.current_minimizer.age
@@ -58,7 +67,8 @@ class PFC:
 
     def evolve(self, minimizer: str, dt: float, eps: float, mu: Optional[float]=None,
                N_steps: int=31, N_epochs:Optional[int]=None,
-               custom_keyboard_interrupt_handler: Optional[Callable[[pfc_base.PFCMinimizer], bool]]=None):
+               custom_keyboard_interrupt_handler: Optional[Callable[[PFCMinimizer], bool]]=None,
+               display_precision: int=5):
 
         if not minimizer in ['mu', 'nonlocal', 'relax']:
             raise ValueError(f'{minimizer} is not a valid minimizer')
@@ -83,13 +93,12 @@ class PFC:
 
 
         if N_epochs is None:
-            self.evolve_nonstop(N_steps, custom_keyboard_interrupt_handler=custom_keyboard_interrupt_handler)
+            self.evolve_nonstop(N_steps, custom_keyboard_interrupt_handler=custom_keyboard_interrupt_handler,
+                    display_precision=display_precision)
         else:
             if N_epochs <=0:
                 raise ValueError(f'N_epochs must be a positive integer')
-            self.evolve_multisteps(N_steps, N_epochs)
-
-                
+            self.evolve_multisteps(N_steps, N_epochs, display_precision=display_precision)
 
     def field_snapshot(self):
         return self.field.export_state()     
@@ -157,4 +166,3 @@ def load_pfc_model(path: str) -> PFC:
     return import_pfc_model(scalarize(data['state']))
 
 
-   

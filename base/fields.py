@@ -1,4 +1,6 @@
 import numpy as np
+from numba import jit, njit
+
 from matplotlib import pyplot as plt
 from scipy.fft import fft2, ifft2, rfft2, irfft2, set_global_backend
 from pprint import pprint
@@ -8,12 +10,21 @@ from util.common import overrides
 import threading
 import tqdm
 import time
+import warnings
+
 
 from .common import IllegalActionError, ModifyingReadOnlyObjectError
 
+
+def real_convolution_2d(psi_k, kernel, NN):
+    r = kernel * (np.abs(psi_k**2))
+    r[:,0] /= 2
+    r[:,-1] /= 2
+    return np.sum(r) / (NN/2)
+
+
 # A Field2D is a complex 2D field with definite dimensions, it also includes:
 # psi, psi_k(fourier transform), forward plan, backward plan
-
 class ComplexField2D:
     def __init__(self, Lx, Ly, Nx, Ny):
         self.set_dimensions(Lx, Ly, Nx, Ny)
@@ -21,8 +32,13 @@ class ComplexField2D:
         self.ifft2 = None
         
     def set_dimensions(self, Lx, Ly, Nx, Ny, verbose=False):
+        if Ny % 2:
+            warnings.warn('odd Ny will be automatically made even for RFFT')
+            Ny += 1
+
         self.Nx = Nx
         self.Ny = Ny
+
         self.set_size(Lx, Ly, verbose=verbose)
         self.psi = pyfftw.zeros_aligned((Nx, Ny), dtype='complex128')
         self.psi_k = pyfftw.zeros_aligned((Nx, Ny), dtype='complex128')
@@ -34,6 +50,7 @@ class ComplexField2D:
         self.Lx = Lx
         self.Ly = Ly
         self.Volume = Lx*Ly
+
         x, kx, self.dx, self.dkx, y, ky, self.dy, self.dky = fourier.generate_xk_2d(Lx, Ly, self.Nx, self.Ny, real=False)
         self.dV = self.dx * self.dy
         self.X, self.Y = np.meshgrid(x, y, indexing='ij')
@@ -185,7 +202,7 @@ class FieldMinimizer:
             self.step()
             i += 1
 
-    def run_multisteps(self, N_steps, N_epochs):
+    def run_multisteps(self, N_steps, N_epochs, **kwargs):
         self.start()
 
         progress_bar = tqdm.tqdm(range(N_epochs), bar_format='{l_bar}{bar}|{postfix}')
@@ -196,7 +213,7 @@ class FieldMinimizer:
 
         self.end()
 
-    def run_nonstop(self, N_steps, custom_keyboard_interrupt_handler=None):
+    def run_nonstop(self, N_steps, custom_keyboard_interrupt_handler=None, **kwargs):
         self.start()
         lock = threading.Lock()
         stopped = False 
@@ -227,6 +244,7 @@ class FieldMinimizer:
                             break
 
         thread.join()
+        print()
         self.end()
 
     def on_create_progress_bar(self, progress_bar: tqdm.tqdm):
