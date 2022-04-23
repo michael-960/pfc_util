@@ -23,15 +23,6 @@ class PFCFreeEnergyFunctional(FreeEnergyFunctional2D):
 
     @overrides(FreeEnergyFunctional2D)
     def free_energy_density(self, field: RealField2D):
-        kernel = 1 - 2*field.K2 + field.K4
-        psi_k = rfft2(field.psi)
-        psi_k_o = kernel * psi_k
-        f = 1/2 * field.psi * irfft2(psi_k_o) + field.psi**4/4 - self.eps/2 * field.psi**2
-        return np.real(f)
-
-
-    @overrides(FreeEnergyFunctional2D)
-    def free_energy_density(self, field: RealField2D):
         kernel = 1-2*field.K2+field.K4
         psi_k = rfft2(field.psi)
         psi_k_o = kernel * psi_k
@@ -44,6 +35,15 @@ class PFCFreeEnergyFunctional(FreeEnergyFunctional2D):
         D4psi = irfft2(field.K4*rfft2(field.psi))
         local_mu = (1-self.eps) * field.psi + field.psi**3 + 2*D2psi + D4psi
         return local_mu
+
+    def grand_potential_density(self, field: RealField2D, mu: float):
+        return self.free_energy_density(field) - mu*field.psi
+
+    def mean_grand_potential_density(self, field: RealField2D, mu: float):
+        return np.mean(self.grand_potential_density(field, mu))
+
+    def grand_potential(self, field: RealField2D, mu: float):
+        return np.sum(self.grand_potential_density(field, mu)) * field.dV
 
 class PFCStateFunction:
     def __init__(self, Lx, Ly, f, F, psibar, omega=None, Omega=None):

@@ -1,7 +1,5 @@
 from .base import fields as fd
-
 from .pfc_core.evolution import ConstantChemicalPotentialMinimizer, NonlocalConservedMinimizer, StressRelaxer, PFCMinimizer
-
 from .base.common import IllegalActionError, scalarize
 from .history import PFCHistory, PFCMinimizerHistoryBlock, PFCEditActionHistoryBlock, import_history
 
@@ -13,6 +11,8 @@ import matplotlib.gridspec as gridspec
 import matplotlib
 import numpy as np
 import warnings
+
+
 
 
 
@@ -37,7 +37,7 @@ class PFC:
     def new_nonlocal_minimizer(self, dt, eps):
         self.current_minimizer = NonlocalConservedMinimizer(self.field, dt, eps)
 
-    def new_stress_relaxer(self, dt, eps, mu):
+    def new_stress_relaxer(self, dt, eps, mu, expansion_rate=1):
         self.current_minimizer = StressRelaxer(self.field, dt, eps, mu)
 
     def evolve_multisteps(self, N_steps, N_epochs, display_precision: int=7):
@@ -68,6 +68,7 @@ class PFC:
     def evolve(self, minimizer: str, dt: float, eps: float, mu: Optional[float]=None,
                N_steps: int=31, N_epochs:Optional[int]=None,
                custom_keyboard_interrupt_handler: Optional[Callable[[PFCMinimizer], bool]]=None,
+               expansion_rate: Optional[float]=None,
                display_precision: int=5):
 
         if not minimizer in ['mu', 'nonlocal', 'relax']:
@@ -80,16 +81,26 @@ class PFC:
         if minimizer == 'mu':
             if mu is None:
                 raise ValueError(f'chemical potential must be specified with constant chemical potential minimizer')
+
+            if not (expansion_rate is None):
+                warnings.warn(f'expansion rate will be ignored for constant chemical potential minimizer')
+
             self.new_mu_minimizer(dt, eps, mu)
         if minimizer == 'nonlocal':
             if not (mu is None):
                 warnings.warn(f'chemical potential will be ignored for nonlocal conserved minimizer')
+            if not (expansion_rate is None):
+                warnings.warn(f'expansion rate will be ignored for nonlocal conserved minimizer')
+
             self.new_nonlocal_minimizer(dt, eps)
 
         if minimizer == 'relax':
             if mu is None:
-                raise ValueError(f'chemical potential must be specified with constant stress relaxer')
-            self.new_stress_relaxer(dt, eps, mu)
+                raise ValueError(f'chemical potential must be specified with constant mu stress relaxer')
+            if expansion_rate is None:
+                raise ValueError(f'expansion rate must be specified with constant mu stress relaxer')
+
+            self.new_stress_relaxer(dt, eps, mu, expansion_rate=expansion_rate)
 
 
         if N_epochs is None:

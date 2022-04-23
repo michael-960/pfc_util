@@ -95,6 +95,12 @@ class ConstantChemicalPotentialMinimizer(PFCMinimizer):
         self._mu_dt_half = self.dt * self.mu / 2
 
     @overrides(PFCMinimizer)
+    def set_display_precision(self, display_precision: int):
+        dp = display_precision
+        super().set_display_precision(dp)
+        self.label = f'const-mu eps={self.eps:.{dp}f} mu={self.mu:.{dp}f} dt={self.dt:.{dp}f}'
+
+    @overrides(PFCMinimizer)
     def step(self):
         self.age += self.dt
         if self.is_noisy:
@@ -137,6 +143,12 @@ class NonlocalConservedMinimizer(PFCMinimizer):
             field.initialize_fft()
 
         self.psibar = np.mean(self.field.psi)
+
+    @overrides(PFCMinimizer)
+    def set_display_precision(self, display_precision: int):
+        dp = display_precision
+        super().set_display_precision(dp)
+        self.label = f'nonlocal eps={self.eps:.{dp}f} dt={self.dt:.{dp}f}'
 
     #@overrides(PFCMinimizer)
     def _step_deprecated(self):
@@ -183,7 +195,7 @@ class StressRelaxer(PFCMinimizer):
             noise_generator: NoiseGenerator2D=None, expansion_rate: float=1):
         super().__init__(field, dt, eps)
         self.f = 1
-        self.label = f'stress-relax eps={eps} mu={mu} dt={dt}'
+
 
         self.dt = dt
         self.eps = eps
@@ -200,9 +212,17 @@ class StressRelaxer(PFCMinimizer):
         if not field.fft_initialized():
             field.initialize_fft()
 
-        self._prepare_consts()
+        self._prepare_minimization()
 
-    def _prepare_consts(self):
+        self.set_display_precision(5)
+
+    @overrides(PFCMinimizer)
+    def set_display_precision(self, display_precision: int):
+        dp = display_precision
+        super().set_display_precision(dp)
+        self.label = f'stress-relax eps={self.eps:.{dp}f} mu={self.mu:.{dp}f} dt={self.dt:.{dp}f}'
+
+    def _prepare_minimization(self):
         f = self.field
         self._exp_dt_eps_half = np.exp(self.dt*self.eps/2)
         self._mu_dt_half = self.dt * self.mu / 2
@@ -216,6 +236,19 @@ class StressRelaxer(PFCMinimizer):
             2/f.Lx/f.Ly * 2*f.Kx2*f.Ky2
         ])
 
+        self.Lx0 = f.Lx
+        self.Ly0 = f.Ly
+        self.fx = 1.
+        self.fy = 1.
+
+        self.Lx = f.Lx
+        self.Ly = f.Ly
+
+        self.K2 = f.K2
+        self.K4 = f.K4
+        self.Kx2 = f.Kx2
+        self.Ky2 = f.Ky2
+
     @overrides(PFCMinimizer)
     def step(self):
         f = self.field
@@ -228,13 +261,13 @@ class StressRelaxer(PFCMinimizer):
         
         f.fft2()
 
-        _kernel = 1-2*f.K2+f.K4 - self.eps
+        _kernel = 1-2*self.K2+self.K4 - self.eps
         _exp_dt_kernel = np.exp(-self.dt*_kernel/2)
         f.psi_k *= _exp_dt_kernel
 
         self.relax_stress_full()
 
-        _kernel = 1-2*f.K2+f.K4 - self.eps
+        _kernel = 1-2*self.K2+self.K4 - self.eps
         _exp_dt_kernel = np.exp(-self.dt*_kernel/2)
         f.psi_k *= _exp_dt_kernel
 
@@ -245,23 +278,43 @@ class StressRelaxer(PFCMinimizer):
 
     def relax_stress_full(self):
         f = self.field
+        #f = self
         dT = self.dt
 
         self._domega_kernels[:,:,:] = [
-                2/f.Lx*f.Kx2*(1-f.K2), 
-                2/f.Ly*f.Ky2*(1-f.K2), 
-                -2/f.Lx**2*f.Kx2*(3-5*f.Kx2-3*f.Ky2),
-                -2/f.Ly**2*f.Ky2*(3-5*f.Ky2-3*f.Kx2),
-                2/f.Lx/f.Ly * 2*f.Kx2*f.Ky2]
+                2/self.Lx*self.Kx2*(1-f.K2), 
+                2/self.Ly*self.Ky2*(1-f.K2), 
+                -2/self.Lx**2*self.Kx2*(3-5*self.Kx2-3*self.Ky2),
+                -2/self.Ly**2*self.Ky2*(3-5*self.Ky2-3*self.Kx2),
+                2/self.Lx/self.Ly * 2*self.Kx2*self.Ky2]
 
         omega_list = self.real_convolution_2d(np.abs(f.psi_k**2), self._domega_kernels)
 
         dLx = -omega_list[0]*dT + (omega_list[0] * omega_list[2] + omega_list[1] * omega_list[4]) * dT**2/2
         dLy = -omega_list[1]*dT + (omega_list[1] * omega_list[3] + omega_list[0] * omega_list[4]) * dT**2/2
-        f.set_size(f.Lx+dLx, f.Ly+dLy)
+
+        dfx = dLx / self.Lx0
+        dfy = dLy / self.Ly0
+
+        #f.set_size(f.Lx+dLx, f.Ly+dLy)
+        self.set_size_scale(self.fx + dfx, self.fy + dfy)
+
+    # size scale factor compared to the original dimensions
+    def set_size_scale(self, fx, fy):
+        self.fx = fx
+        self.fy = fy
+        self.Kx2 = self.field.Kx2 / fx**2
+        self.Ky2 = self.field.Ky2 / fy**2
+        self.K2 = self.Kx2 + self.Ky2
+        self.K4 = self.K2**2
+        self.Lx = self.field.Lx * self.fx
+        self.Ly = self.field.Ly * self.fy
+
 
     @overrides(PFCMinimizer)
     def get_state_function(self):
+        self.field.set_size(self.Lx, self.Ly)
+        self.set_size_scale(1., 1.)
         psibar = np.mean(self.field.psi)
         psiN = psibar * self.field.Volume
 
