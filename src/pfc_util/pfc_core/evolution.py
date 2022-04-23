@@ -1,5 +1,4 @@
 import numpy as np
-from numba import jit, njit
 from matplotlib import pyplot as plt
 from scipy.fft import fft2, ifft2, rfft2, irfft2, set_global_backend
 from pprint import pprint
@@ -11,11 +10,11 @@ import threading
 import sys
 from typing import List
 
-from util.math import fourier
-from util.common import overrides
+from michael960lib.math import fourier
+from michael960lib.common import overrides
 
-from ..base.fields import FreeEnergyFunctional2D, FieldMinimizer, RealField2D, NoiseGenerator2D, import_field, real_convolution_2d
-from ..base.common import ModifyingReadOnlyObjectError, IllegalActionError
+from torusgrid.fields import FreeEnergyFunctional2D, FieldMinimizer, RealField2D, NoiseGenerator2D, import_field, real_convolution_2d
+from michael960lib.common import ModifyingReadOnlyObjectError, IllegalActionError
 
 from .base import PFCStateFunction, PFCFreeEnergyFunctional
 

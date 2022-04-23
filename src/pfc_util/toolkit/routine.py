@@ -1,7 +1,7 @@
 import numpy as np
-from ..base.fields import RealField2D
+from torusgrid.fields import RealField2D
 from ..pfc import PFC
-from ..base.field_util import liquefy
+from torusgrid.field_util import liquefy
 from ..pfc_core.base import PFCFreeEnergyFunctional
 
 

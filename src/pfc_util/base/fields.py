@@ -5,6 +5,7 @@ from matplotlib import pyplot as plt
 from scipy.fft import fft2, ifft2, rfft2, irfft2, set_global_backend
 from pprint import pprint
 import pyfftw
+
 from util.math import fourier
 from util.common import overrides
 import threading

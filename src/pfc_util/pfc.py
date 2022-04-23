@@ -1,6 +1,6 @@
-from .base import fields as fd
+from torusgrid import fields as fd
 from .pfc_core.evolution import ConstantChemicalPotentialMinimizer, NonlocalConservedMinimizer, StressRelaxer, PFCMinimizer
-from .base.common import IllegalActionError, scalarize
+from michael960lib.common import IllegalActionError, scalarize
 from .history import PFCHistory, PFCMinimizerHistoryBlock, PFCEditActionHistoryBlock, import_history
 
 from typing import Optional, Union, Callable

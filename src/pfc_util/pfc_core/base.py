@@ -10,11 +10,11 @@ import threading
 import sys
 from typing import List
 
-from util.math import fourier
-from util.common import overrides
+from michael960lib.math import fourier
+from michael960lib.common import overrides
 
-from ..base.fields import FreeEnergyFunctional2D, FieldMinimizer, RealField2D, NoiseGenerator2D, import_field, real_convolution_2d
-from ..base.common import ModifyingReadOnlyObjectError, IllegalActionError
+from torusgrid.fields import FreeEnergyFunctional2D, FieldMinimizer, RealField2D, NoiseGenerator2D, import_field, real_convolution_2d
+from michael960lib.common import ModifyingReadOnlyObjectError, IllegalActionError
 
 
 class PFCFreeEnergyFunctional(FreeEnergyFunctional2D):
