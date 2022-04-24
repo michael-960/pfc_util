@@ -1,6 +1,5 @@
 import setuptools
-with open('README.txt', 'r') as f:
-    long_description = f.read()
+from pathlib import Path
 
 
 setuptools.setup(

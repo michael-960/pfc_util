@@ -1,20 +1,3 @@
-Metadata-Version: 2.1
-Name: pfc-util
-Version: 0.1.12
-Summary: package for PFC (phase field crystal) simulations
-Home-page: https://github.com/michael-960/pfc_util
-Author: Michael Wang
-Author-email: mike.wang96029@gmail.com
-License: UNKNOWN
-Project-URL: Bug Tracker, https://github.com/michael-960/pfc_util/issues
-Platform: UNKNOWN
-Classifier: Programming Language :: Python :: 3
-Classifier: License :: OSI Approved :: MIT License
-Classifier: Operating System :: OS Independent
-Requires-Python: >=3.7
-Description-Content-Type: text/x-rst
-License-File: LICENSE
-
 PFC simulation in python
 ==============================
 
@@ -45,5 +28,3 @@ Modules
 :code:`pfc_util.profile_prompt` - Interactive PFC Prompt (WIP).
 
 :code:`pfc_util.pfc` - High-level main module that contains the class :code:`pfc.PFC` whose instances are PFC models capable of recording and plotting minimization history etc. Save and load models in npz format with :code:`pfc.PFC.save()` and :code:`pfc.load_pfc_model()`.
-
-
