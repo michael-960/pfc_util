@@ -7,7 +7,7 @@ import time
 import threading
 import sys
 
-from util.math import fourier
+from michael960lib.math import fourier
 
 import warnings
 

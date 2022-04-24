@@ -5,8 +5,8 @@ from matplotlib import pyplot as plt
 import numpy as np
 import sys
 import subprocess
-from util import common as cmn
-from util.common import overrides
+from michael960lib import common as cmn
+from michael960lib.common import overrides
 import os
 import re
 import readline

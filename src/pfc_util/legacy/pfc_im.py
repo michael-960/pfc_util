@@ -6,8 +6,9 @@ import pyfftw
 import time
 import threading
 import sys
-from util.math import fourier
-from util.common import overrides
+
+from michael960lib.math import fourier
+from michael960lib.common import overrides
 
 
 # pyfftw implementation

@@ -2,7 +2,7 @@ import numpy as np
 from torusgrid.fields import RealField2D
 from ..pfc import PFC
 from torusgrid.field_util import liquefy
-from ..pfc_core.base import PFCFreeEnergyFunctional
+from ..core.base import PFCFreeEnergyFunctional
 
 
 def find_coexistent_mu(solid_field: RealField2D, eps: float, mu_min: float, mu_max: float, 

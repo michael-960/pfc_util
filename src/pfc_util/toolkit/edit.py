@@ -1,4 +1,4 @@
-from ..base import field_util
+from torusgrid import field_util
 
 class PFCEditor:
     def __init__(self):
