@@ -1,0 +1,7 @@
+*.npz binary
+*.npy binary
+*.h5 binary
+*.hdf5 binary
+*.png binary
+*.jpg binary
+
