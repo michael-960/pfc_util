@@ -8,7 +8,7 @@ import pyfftw
 import time
 import threading
 import sys
-from typing import List
+from typing import List, Optional
 
 from michael960lib.math import fourier
 from michael960lib.common import overrides
@@ -31,9 +31,15 @@ class PFCFreeEnergyFunctional(FreeEnergyFunctional2D):
 
     @overrides(FreeEnergyFunctional2D)
     def derivative(self, field: RealField2D):
-        D2psi = irfft2(-field.K2*rfft2(field.psi))
-        D4psi = irfft2(field.K4*rfft2(field.psi))
-        local_mu = (1-self.eps) * field.psi + field.psi**3 + 2*D2psi + D4psi
+
+        field.fft2()
+        #D2psi = irfft2(-field.K2*rfft2(field.psi))
+        #D4psi = irfft2(field.K4*rfft2(field.psi))
+        linear_term = ((1-field.K2)**2 - self.eps) * field.psi_k
+        field.ifft2()
+
+        #local_mu = (1-self.eps) * field.psi + field.psi**3 + 2*D2psi + D4psi
+        local_mu = irfft2(linear_term) + field.psi**3
         return local_mu
 
     def grand_potential_density(self, field: RealField2D, mu: float):
@@ -76,7 +82,16 @@ class PFCStateFunction:
             raise ValueError(f'{item_name} is not a valid PFC state function')
         return self.item_dict[item_name]
 
-    def to_string(self, float_fmt='.7f', pad=1, delim='|'):
+    def to_string(self, state_string_format: Optional[str]=None,
+            float_fmt: str='.3f', pad: int=1, delim: str='|'):
+        if not state_string_format is None:
+            return state_string_format.format(
+                Lx=self.Lx, Ly=self.Ly, f=self.f, F=self.F, 
+                omega=self.omega, Omega=self.Omega, psibar=self.psibar
+            )
+
+
+
         delim_padded = ' '*pad + delim + ' '*pad
         items = ['Lx', 'Ly', 'f', 'F', 'omega', 'Omega', 'psibar']
         state_func_list = []

@@ -1,8 +1,12 @@
 import numpy as np
 from torusgrid.fields import RealField2D
-from ..pfc import PFC
 from torusgrid.field_util import liquefy
+from torusgrid import field_util as fu
+
+from ..pfc import PFC
 from ..core.base import PFCFreeEnergyFunctional
+from ..core.evolution import PFCMinimizer
+from typing import Optional, Callable
 
 
 def find_coexistent_mu(solid_field: RealField2D, eps: float, mu_min: float, mu_max: float, 
@@ -68,3 +72,56 @@ def find_coexistent_mu(solid_field: RealField2D, eps: float, mu_min: float, mu_m
 
 def is_liquid(psi: np.ndarray, tol=1e-5):
     return np.max(psi) - np.min(psi) <= tol
+
+
+# [interface] -> [left][right]
+# elongation: [delta_liq][------left------][delta_sol][delta_sol][------right------][delta_liq]
+def evolve_and_elongate_interface(
+        ifc: RealField2D, delta_sol: RealField2D, delta_liq: RealField2D,
+        minimizer_supplier: Callable[[PFC], PFCMinimizer]=None,
+        minimizer: str=None, dt: float=None, eps: float=None, mu: float=None, 
+        N_steps: int=31, N_epochs: Optional[int]=None,
+        display_precision: int=3, display_format: Optional[str]=None,
+        verbose=False
+        ):
+
+    try:
+        assert delta_sol.Ny == delta_liq.Ny == ifc.Ny
+        assert delta_sol.Ly == delta_liq.Ly == ifc.Ly
+    except AssertionError:
+        raise ValueError('delta_sol, delta_liq, and ifc must have the same Y dimensions')
+
+
+    dp = display_precision
+    if verbose:
+        print(f'Lx={ifc.Lx:.{dp+2}f}, Ly={ifc.Ly:.{dp+2}f}')
+        print(f'evolving interface')
+    model = PFC(ifc)
+
+    model.evolve(
+            minimizer_supplier=minimizer_supplier,
+            minimizer=minimizer, dt=dt, eps=eps, mu=mu, N_steps=N_steps, N_epochs=N_epochs, 
+            display_precision=display_precision, display_format=display_format
+    )
+
+
+    if verbose:
+        print(f'elongating interface')
+
+
+    left = fu.crop(model.field, 0, 0.5, 0, 1)
+    right = fu.crop(model.field, 0.5, 1, 0, 1)
+     
+
+    tmp = fu.concat(delta_liq, left)
+    tmp = fu.concat(tmp, delta_sol)    
+    tmp = fu.concat(tmp, delta_sol)    
+    tmp = fu.concat(tmp, right)   
+    ifc_elongated = fu.concat(tmp, delta_liq)
+
+    if verbose:
+        print(f'Lx={ifc_elongated.Lx:.{dp+2}f}, Ly={ifc_elongated.Ly:.{dp+2}f}')
+    return model, ifc_elongated
+
+
+     

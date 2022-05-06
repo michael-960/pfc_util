@@ -8,15 +8,17 @@ import pyfftw
 import time
 import threading
 import sys
-from typing import List
+from typing import List, Optional
 
 from michael960lib.math import fourier
 from michael960lib.common import overrides
 
 from torusgrid.fields import FreeEnergyFunctional2D, FieldMinimizer, RealField2D, NoiseGenerator2D, import_field, real_convolution_2d
-from michael960lib.common import ModifyingReadOnlyObjectError, IllegalActionError
+from michael960lib.common import ModifyingReadOnlyObjectError, IllegalActionError, experimental
 
-from .base import PFCStateFunction, PFCFreeEnergyFunctional
+from .base import PFCStateFunction, PFCFreeEnergyFunctional, import_state_function
+
+import warnings
 
 
 class PFCMinimizer(FieldMinimizer):
@@ -28,10 +30,15 @@ class PFCMinimizer(FieldMinimizer):
 
         self.label = 'NULL'
         self.history = PFCMinimizerHistory()
-        self.display_precision = 7
+        self.display_precision = 3
+        self.display_format = None
     
     def set_display_precision(self, display_precision):
         self.display_precision = display_precision
+
+    def set_display_format(self, display_format: str):
+        self.display_format = display_format
+
 
     @overrides(FieldMinimizer)
     def on_create_progress_bar(self, progress_bar: tqdm.tqdm):
@@ -53,18 +60,34 @@ class PFCMinimizer(FieldMinimizer):
     @overrides(FieldMinimizer)
     def on_epoch_end(self, progress_bar: tqdm.tqdm):
         dp = self.display_precision
-        state_function = self.get_state_function()
-        state_function_str = state_function.to_string(float_fmt=f'.{dp}f')
-        progress_bar.set_description_str(f'[{self.label}][t={self.age:.{dp}f}] {state_function_str}')
-        self.history.append_state_function(self.age, state_function)
+        sf = self.get_state_function()
+
+        if not self.display_format is None:
+            progress_bar.set_description_str(self.display_format.format(
+                label=self.label, age=self.age,
+                Lx=sf.Lx, Ly = sf.Ly, f=sf.f, F=sf.F, omega=sf.omega, Omega=sf.Omega, psibar=sf.psibar
+                )
+            )
+        else:
+            state_function_str = sf.to_string(float_fmt=f'.{dp+4}f')
+            progress_bar.set_description_str(f'[{self.label}][t={self.age:.{dp}f}] {state_function_str}')
+
+        self.history.append_state_function(self.age, sf)
 
     @overrides(FieldMinimizer)
     def on_nonstop_epoch_end(self):
         dp = self.display_precision
-        state_function = self.get_state_function()
-        state_function_str = state_function.to_string(float_fmt=f'.{dp}f')
-        sys.stdout.write(f'\r[{self.label}][t={self.age:.{dp}f}] {state_function_str}')
-        self.history.append_state_function(self.age, state_function)
+        sf = self.get_state_function()
+        if not self.display_format is None:
+            sys.stdout.write('\r' + self.display_format.format(
+                label=self.label, age=self.age,
+                Lx=sf.Lx, Ly = sf.Ly, f=sf.f, F=sf.F, omega=sf.omega, Omega=sf.Omega, psibar=sf.psibar
+            )
+        )
+        else:
+            state_function_str = sf.to_string(float_fmt=f'.{dp+4}f')
+            sys.stdout.write(f'\r[{self.label}][t={self.age:.{dp}f}] {state_function_str}')
+        self.history.append_state_function(self.age, sf)
 
     @overrides(FieldMinimizer)
     def end(self):
@@ -97,7 +120,7 @@ class ConstantChemicalPotentialMinimizer(PFCMinimizer):
     def set_display_precision(self, display_precision: int):
         dp = display_precision
         super().set_display_precision(dp)
-        self.label = f'const-mu eps={self.eps:.{dp}f} mu={self.mu:.{dp}f} dt={self.dt:.{dp}f}'
+        self.label = f'const-mu eps={self.eps:.{dp+1}f} mu={self.mu:.{dp+1}f} dt={self.dt:.{dp}f}'
 
     @overrides(PFCMinimizer)
     def step(self):
@@ -147,22 +170,7 @@ class NonlocalConservedMinimizer(PFCMinimizer):
     def set_display_precision(self, display_precision: int):
         dp = display_precision
         super().set_display_precision(dp)
-        self.label = f'nonlocal eps={self.eps:.{dp}f} dt={self.dt:.{dp}f}'
-
-    #@overrides(PFCMinimizer)
-    def _step_deprecated(self):
-        self.age += self.dt
-        psi3k = rfft2(self.field.psi**3)
-
-        if self.is_noisy:
-            self.field.psi += self.dt * self.noise_generator.generate() 
-
-        self.field.fft2()
-        psik00 = self.field.psi_k[0,0]
-        self.field.psi_k -= self.dt * psi3k
-        self.field.psi_k *= self._exp_dt_kernel
-        self.field.psi_k[0,0] = psik00
-        self.field.ifft2()
+        self.label = f'nonlocal eps={self.eps:.{dp+1}f} dt={self.dt:.{dp+1}f}'
 
     @overrides(PFCMinimizer)
     def step(self):
@@ -170,16 +178,134 @@ class NonlocalConservedMinimizer(PFCMinimizer):
 
         if self.is_noisy:
             self.field.psi += self.dt * self.noise_generator.generate() 
-
+        
         self.field.psi /= np.sqrt(1+self.field.psi**2*self.dt)
+        self.field.psi += - np.mean(self.field.psi) + self.psibar
 
         self.field.fft2()
         self.field.psi_k *= self._exp_dt_kernel
         self.field.ifft2()
+        self.field.psi += - np.mean(self.field.psi) + self.psibar
 
         self.field.psi /= np.sqrt(1+self.field.psi**2*self.dt)
+        self.field.psi += - np.mean(self.field.psi) + self.psibar
 
-        self.field.psi -= np.mean(self.field.psi) - self.psibar
+    @overrides(PFCMinimizer)
+    def get_state_function(self):
+        psibar = np.mean(self.field.psi)
+        f = self.fef.mean_free_energy_density(self.field)
+        F = self.fef.free_energy(self.field)
+        return PFCStateFunction(self.field.Lx, self.field.Ly, f, F, psibar)
+
+
+class NonlocalConservedRK4(NonlocalConservedMinimizer):
+    @experimental('Nonlocal RK4 is experimental and not optimized')
+    def __init__(self, field: RealField2D, dt: float, eps: float,
+            noise_generator: Optional[NoiseGenerator2D]=None,
+            k_regularizer=0.1, inertia=100):
+        super().__init__(field, dt, eps, noise_generator)
+        self.R = k_regularizer
+        self.label = f'nonlocal-rk4 eps={eps} dt={dt} R={k_regularizer} M={inertia}'
+
+        self.field_tmp = self.field.copy()
+        self.field_tmp.initialize_fft()
+
+        self._deriv = RealField2D(field.Lx, field.Ly, field.Nx, field.Ny)
+        self._deriv.initialize_fft()
+
+        self.dfield = self.field.copy()
+        self.dfield.set_psi(0)
+        self.dfield.initialize_fft()
+
+        self.dfield_tmp = self.dfield.copy()
+        self.dfield_tmp.initialize_fft()
+
+        self.inertia = inertia
+
+    @overrides(PFCMinimizer)
+    def set_display_precision(self, display_precision: int):
+        dp = display_precision
+        super().set_display_precision(dp)
+        self.label = f'nonlocal-rk4 eps={self.eps:.{dp+1}f} dt={self.dt:.{dp+1}f} R={self.R:.{dp}f} M={self.inertia:.{dp}f}'
+
+    def _psi_dot(self):
+        self._deriv.psi[:,:] = -self.fef.derivative(self.field_tmp)
+        self._deriv.fft2()
+        self._deriv.psi_k *= np.exp(-self.R*self._deriv.K2)
+        self._deriv.ifft2()
+        F = self._deriv.psi - np.mean(self._deriv.psi)
+        return self.dfield_tmp.psi*self.inertia, -(self.dfield_tmp.psi - F)
+
+    # RK4
+    @overrides(NonlocalConservedMinimizer)
+    def step(self):
+        self.age += self.dt
+        self.field_tmp.psi[:] = self.field.psi
+        self.dfield_tmp.psi[:] = self.dfield.psi
+
+        k1, l1 = self._psi_dot()
+        self.field_tmp.psi += k1*self.dt/2
+        self.dfield_tmp.psi += l1*self.dt/2
+
+        k2, l2 = self._psi_dot()
+        self.field_tmp.psi += k2*self.dt/2
+        self.dfield_tmp.psi += l2*self.dt/2
+
+        k3, l3 = self._psi_dot()
+        self.field_tmp.psi += k3*self.dt
+        self.dfield_tmp.psi += l3*self.dt
+
+        k4, l4 = self._psi_dot()
+
+        self.field.psi += self.dt / 6 * (k1 + 2*k2 + 2*k3 + k4)
+        self.dfield.psi += self.dt / 6 * (l1 + 2*l2 + 2*l3 + l4)
+ 
+
+class ConservedMinimizer(PFCMinimizer):
+    @experimental('Local conserved minimizer is not implemented yet')
+    def __init__(self, field: RealField2D, dt: float, eps: float, noise_generator:NoiseGenerator2D=None):
+        super().__init__(field, dt, eps)
+        self.label = f'nonlocal eps={eps} dt={dt}'
+
+        self._kernel = 1-2*self.field.K2+self.field.K4 - self.eps
+        self._exp_dt_kernel = np.exp(-dt*self._kernel)
+        self.noise_generator = noise_generator
+        self.fef = PFCFreeEnergyFunctional(eps)
+        self.is_noisy = not (noise_generator is None)
+
+        if not field.fft_initialized():
+            field.initialize_fft()
+
+        self.psibar = np.mean(self.field.psi)
+
+        self.field_tmp = self.field.copy()
+
+    @overrides(PFCMinimizer)
+    def set_display_precision(self, display_precision: int):
+        dp = display_precision
+        super().set_display_precision(dp)
+        self.label = f'nonlocal eps={self.eps:.{dp+1}f} dt={self.dt:.{dp+1}f}'
+
+    #@overrides(PFCMinimizer)
+    def step(self):
+        raise NotImplementedError
+        self.age += self.dt
+
+        if self.is_noisy:
+            self.field.psi += self.dt * self.noise_generator.generate() 
+        
+        self.field.psi /= np.sqrt(1+self.field.psi**2*self.dt)
+        self.field.psi += - np.mean(self.field.psi) + self.psibar
+
+        self.field.fft2()
+        self.field.psi_k *= self._exp_dt_kernel
+        self.field.ifft2()
+        self.field.psi += - np.mean(self.field.psi) + self.psibar
+
+        self.field.psi /= np.sqrt(1+self.field.psi**2*self.dt)
+        self.field.psi += - np.mean(self.field.psi) + self.psibar
+
+
 
     @overrides(PFCMinimizer)
     def get_state_function(self):
@@ -201,11 +327,8 @@ class StressRelaxer(PFCMinimizer):
         self.mu = mu
         self.noise_generator = noise_generator
         self.is_noisy = not (noise_generator is None)
-
         self.fef = PFCFreeEnergyFunctional(eps)
-
         self.dT = self.dt * expansion_rate / 2
-
         self.NN = field.Nx * field.Ny
 
         if not field.fft_initialized():
@@ -219,7 +342,7 @@ class StressRelaxer(PFCMinimizer):
     def set_display_precision(self, display_precision: int):
         dp = display_precision
         super().set_display_precision(dp)
-        self.label = f'stress-relax eps={self.eps:.{dp}f} mu={self.mu:.{dp}f} dt={self.dt:.{dp}f}'
+        self.label = f'stress-relax eps={self.eps:.{dp+1}f} mu={self.mu:.{dp+1}f} dt={self.dt:.{dp+1}f}'
 
     def _prepare_minimization(self):
         f = self.field
@@ -329,6 +452,68 @@ class StressRelaxer(PFCMinimizer):
         r = kernel * psi_k_sq
         r[:,:,[0,-1]] *= 0.5
         return r.sum(axis=(1,2)) * self._2_NN
+
+
+class RandomStepMinimizer(PFCMinimizer):
+    def __init__(self, field: RealField2D, dt: float, eps: float, mu: float, seed: int):
+        super().__init__(field, dt, eps)
+        self.target = 'Omega'
+        self.label = 'random eps={eps} mu={mu} dt={dt}'
+        if mu is None:
+            self.target = 'F'
+            self.label = 'random eps={eps} dt={dt}'
+
+        self.mu = mu
+        self.fef = PFCFreeEnergyFunctional(eps)
+
+        self.generator = np.random.default_rng(seed)
+        self.candidate_field = self.field.copy()
+
+        self.random_scale = self.dt**2 * np.sqrt(np.mean(self.fef.derivative(self.field)**2))
+        print(f'scale = {self.random_scale}')
+
+    @overrides(PFCMinimizer)
+    def set_display_precision(self, dp):
+        super().set_display_precision(dp)
+        if self.target == 'Omega':
+            self.label = f'random eps={self.eps:.{dp+1}f} mu={self.mu:.{dp+1}f} dt={self.dt:.{dp}f}'
+        else:
+            self.label = f'random eps={self.eps:.{dp+1}f} dt={self.dt:.{dp}f}'
+
+    @overrides(PFCMinimizer) 
+    def step(self):
+        self.age += self.dt
+        self.candidate_field.psi = self.field.psi + self.generator.normal(0, self.random_scale, size=(self.field.Nx,self.field.Ny))
+        if self.target == 'F':
+            F0 = self.fef.free_energy(self.field) 
+            F1 = self.fef.free_energy(self.candidate_field)
+            if F1 < F0:
+                self.field.psi[:,:] = self.candidate_field.psi
+        if self.target == 'Omega':
+            O0 = self.fef.grand_potential(self.field, self.mu) 
+            O1 = self.fef.grand_potential(self.candidate_field, self.mu)
+            if O1 < O0:
+                self.field.psi[:,:] = self.candidate_field.psi
+
+
+    @overrides(PFCMinimizer)
+    def get_state_function(self):
+        Lx = self.field.Lx
+        Ly = self.field.Ly
+        psibar = np.mean(self.field.psi)
+        f = self.fef.mean_free_energy_density(self.field)
+        F = self.fef.free_energy(self.field)
+
+        omega = None
+        Omega = None
+        if self.target == 'Omega':
+            omega = self.fef.mean_grand_potential_density(self.field, self.mu)
+            Omega = self.fef.grand_potential(self.field, self.mu)
+
+        return PFCStateFunction(Lx, Ly, f, F, psibar, omega, Omega)
+
+
+
 
 
 

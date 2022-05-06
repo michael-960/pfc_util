@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 from torusgrid import fields as fd
 from .core.evolution import ConstantChemicalPotentialMinimizer, NonlocalConservedMinimizer, StressRelaxer, PFCMinimizer
 from michael960lib.common import IllegalActionError, scalarize
 from .history import PFCHistory, PFCMinimizerHistoryBlock, PFCEditActionHistoryBlock, import_history
 
-from typing import Optional, Union, Callable
+from typing import Optional, Union, Callable, List
 from matplotlib import pyplot as plt
 from matplotlib.patches import Rectangle
 from matplotlib.widgets import Slider
@@ -13,13 +15,13 @@ import numpy as np
 import warnings
 
 
+matplotlib.use('TKAgg')
+matplotlib.style.use('fast')
 
 
 
 class PFC:
     def __init__(self, field: fd.RealField2D):
-        matplotlib.use('TKAgg')
-        matplotlib.style.use('fast')
 
         self.field = field 
         self.age = 0
@@ -29,6 +31,16 @@ class PFC:
         self.current_minimizer = None
 
     def new_minimizer(self, minimizer: PFCMinimizer):
+        try:
+            assert isinstance(minimizer, PFCMinimizer)
+            assert not minimizer.started
+            assert not minimizer.ended
+            assert not minimizer.history.is_committed()
+            assert minimizer.age == 0
+            assert minimizer.field is self.field
+        except AssertionError:
+            raise ValueError('invalid minimizer')
+
         self.current_minimizer = minimizer
 
     def new_mu_minimizer(self, dt, eps, mu):
@@ -40,11 +52,13 @@ class PFC:
     def new_stress_relaxer(self, dt, eps, mu, expansion_rate=1):
         self.current_minimizer = StressRelaxer(self.field, dt, eps, mu)
 
-    def evolve_multisteps(self, N_steps, N_epochs, display_precision: int=7):
+    def evolve_multisteps(self, N_steps, N_epochs,
+            display_precision: int=3, display_format: Optional[str]=None):
         if self.current_minimizer is None:
             raise fd.MinimizerError(self.current_minimizer) 
 
         self.current_minimizer.set_display_precision(display_precision)
+        self.current_minimizer.set_display_format(display_format)
         self.current_minimizer.run_multisteps(N_steps, N_epochs)
 
         self.history_pointer += 1
@@ -52,64 +66,74 @@ class PFC:
         self.history.cut_and_insert(PFCMinimizerHistoryBlock(self.current_minimizer.history), self.history_pointer)
         self.current_minimizer = None
 
-    def evolve_nonstop(self, N_steps, custom_keyboard_interrupt_handler=None, display_precision: int=7):
+    def evolve_nonstop(self, N_steps, custom_keyboard_interrupt_handler=None,
+            display_precision: int=3, display_format: Optional[str]=None):
         if self.current_minimizer is None:
             raise fd.MinimizerError(self.current_minimizer) 
 
-
         self.current_minimizer.set_display_precision(display_precision)
-        self.current_minimizer.run_nonstop(N_steps, custom_keyboard_interrupt_handler, display_precision=display_precision)
+        self.current_minimizer.set_display_format(display_format)
+        self.current_minimizer.run_nonstop(N_steps, custom_keyboard_interrupt_handler)
 
         self.history_pointer += 1
         self.age += self.current_minimizer.age
         self.history.cut_and_insert(PFCMinimizerHistoryBlock(self.current_minimizer.history), self.history_pointer)
         self.current_minimizer = None
 
-    def evolve(self, minimizer: str, dt: float, eps: float, mu: Optional[float]=None,
-               N_steps: int=31, N_epochs:Optional[int]=None,
-               custom_keyboard_interrupt_handler: Optional[Callable[[PFCMinimizer], bool]]=None,
-               expansion_rate: Optional[float]=None,
-               display_precision: int=5):
+    def evolve(self,
+        minimizer_supplier: Optional[Callable[[PFC], PFCMinimizer]]=None,
+        minimizer: str=None, dt: float=None, eps: float=None, mu: Optional[float]=None,
+        expansion_rate: Optional[float]=None,
+        N_steps: int=31, N_epochs: Optional[int]=None,
+        custom_keyboard_interrupt_handler: Optional[Callable[[PFCMinimizer], bool]]=None,
+        display_precision: int=3, display_format: Optional[str]=None):
 
-        if not minimizer in ['mu', 'nonlocal', 'relax']:
-            raise ValueError(f'{minimizer} is not a valid minimizer')
+        if not minimizer_supplier is None:
+            if None not in (minimizer, dt, eps, mu, expansion_rate):
+                warnings.warn('ignoring other arguments passed to evolve() when using minimizer supplier')
 
-        if N_steps <= 0:
-            raise ValueError(f'N_steps must be a positive integer')
-        
+            minim = minimizer_supplier(self)
+            self.new_minimizer(minim)
 
-        if minimizer == 'mu':
-            if mu is None:
-                raise ValueError(f'chemical potential must be specified with constant chemical potential minimizer')
+        else:
+            if not minimizer in ['mu', 'nonlocal', 'relax']:
+                raise ValueError(f'{minimizer} is not a valid minimizer')
 
-            if not (expansion_rate is None):
-                warnings.warn(f'expansion rate will be ignored for constant chemical potential minimizer')
+            if N_steps <= 0:
+                raise ValueError(f'N_steps must be a positive integer')
+            
+            if minimizer == 'mu':
+                if mu is None:
+                    raise ValueError(f'chemical potential must be specified with constant chemical potential minimizer')
 
-            self.new_mu_minimizer(dt, eps, mu)
-        if minimizer == 'nonlocal':
-            if not (mu is None):
-                warnings.warn(f'chemical potential will be ignored for nonlocal conserved minimizer')
-            if not (expansion_rate is None):
-                warnings.warn(f'expansion rate will be ignored for nonlocal conserved minimizer')
+                if not (expansion_rate is None):
+                    warnings.warn(f'expansion rate will be ignored for constant chemical potential minimizer')
 
-            self.new_nonlocal_minimizer(dt, eps)
+                self.new_mu_minimizer(dt, eps, mu)
+            if minimizer == 'nonlocal':
+                if not (mu is None):
+                    warnings.warn(f'chemical potential will be ignored for nonlocal conserved minimizer')
+                if not (expansion_rate is None):
+                    warnings.warn(f'expansion rate will be ignored for nonlocal conserved minimizer')
 
-        if minimizer == 'relax':
-            if mu is None:
-                raise ValueError(f'chemical potential must be specified with constant mu stress relaxer')
-            if expansion_rate is None:
-                raise ValueError(f'expansion rate must be specified with constant mu stress relaxer')
+                self.new_nonlocal_minimizer(dt, eps)
 
-            self.new_stress_relaxer(dt, eps, mu, expansion_rate=expansion_rate)
+            if minimizer == 'relax':
+                if mu is None:
+                    raise ValueError(f'chemical potential must be specified with constant mu stress relaxer')
+                if expansion_rate is None:
+                    raise ValueError(f'expansion rate must be specified with constant mu stress relaxer')
+
+                self.new_stress_relaxer(dt, eps, mu, expansion_rate=expansion_rate)
 
 
         if N_epochs is None:
             self.evolve_nonstop(N_steps, custom_keyboard_interrupt_handler=custom_keyboard_interrupt_handler,
-                    display_precision=display_precision)
+                    display_precision=display_precision, display_format=display_format)
         else:
             if N_epochs <=0:
                 raise ValueError(f'N_epochs must be a positive integer')
-            self.evolve_multisteps(N_steps, N_epochs, display_precision=display_precision)
+            self.evolve_multisteps(N_steps, N_epochs, display_precision=display_precision, display_format=display_format)
 
     def field_snapshot(self):
         return self.field.export_state()     
@@ -153,6 +177,7 @@ class PFC:
         np.savez(path, state=state)
 
     def save_hdf5(self, path):
+        raise NotImplementedError
         state = self.export()
 
 
@@ -175,5 +200,51 @@ def import_pfc_model(state: dict) -> PFC:
 def load_pfc_model(path: str) -> PFC:
     data = np.load(path, allow_pickle=True)
     return import_pfc_model(scalarize(data['state']))
+
+
+class PFCGroup:
+    def __init__(self):
+        self.models = dict()
+    
+    def put(self, model: PFC, name: str, attrs=dict()):
+        self.models[name] = {'model': model, 'attrs': attrs}
+
+    def save(self, path):
+        data = dict() 
+        for name in self.models:
+            model_state = self.models[name]['model'].export()
+            attrs = self.models[name]['attrs']
+            data[name] = {'model': model_state, 'attrs': attrs}
+        np.savez(path, **data)
+
+    def get_names(self) -> List[str]:
+        return list(self.models.keys())
+
+    def get_model(self, name) -> PFC:
+        return self.models[name]['model']
+
+    def get_attrs(self, name) -> dict:
+        return self.models[name]['attrs']
+
+
+
+def load_pfc_group(path: str) -> PFCGroup:
+    saved = np.load(path, allow_pickle=True)
+    g = PFCGroup()
+
+    for name in saved.files:
+        data = scalarize(saved[name])
+        model_state = data['model']
+        model = import_pfc_model(model_state)
+        attrs = data['attrs']
+
+        g.put(model, name, attrs=attrs)
+    return g
+
+     
+     
+
+
+
 
 
