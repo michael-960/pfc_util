@@ -6,7 +6,7 @@ from torusgrid import field_util as fu
 from ..pfc import PFC
 from ..core.base import PFCFreeEnergyFunctional
 from ..core.evolution import PFCMinimizer
-from typing import Optional, Callable
+from typing import Optional, Callable, List
 
 
 def find_coexistent_mu(solid_field: RealField2D, eps: float, mu_min: float, mu_max: float, 
@@ -82,6 +82,7 @@ def evolve_and_elongate_interface(
         minimizer: str=None, dt: float=None, eps: float=None, mu: float=None, 
         N_steps: int=31, N_epochs: Optional[int]=None,
         display_precision: int=3, display_format: Optional[str]=None,
+        callbacks: List[Callable]=[],
         verbose=False
         ):
 
@@ -101,9 +102,8 @@ def evolve_and_elongate_interface(
     model.evolve(
             minimizer_supplier=minimizer_supplier,
             minimizer=minimizer, dt=dt, eps=eps, mu=mu, N_steps=N_steps, N_epochs=N_epochs, 
-            display_precision=display_precision, display_format=display_format
+            display_format=display_format, callbacks=callbacks
     )
-
 
     if verbose:
         print(f'elongating interface')
@@ -111,7 +111,6 @@ def evolve_and_elongate_interface(
 
     left = fu.crop(model.field, 0, 0.5, 0, 1)
     right = fu.crop(model.field, 0.5, 1, 0, 1)
-     
 
     tmp = fu.concat(delta_liq, left)
     tmp = fu.concat(tmp, delta_sol)    

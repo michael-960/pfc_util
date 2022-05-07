@@ -11,10 +11,11 @@ import sys
 from typing import List, Optional
 
 from michael960lib.math import fourier
-from michael960lib.common import overrides
+from michael960lib.common import overrides, ModifyingReadOnlyObjectError, IllegalActionError
 
-from torusgrid.fields import FreeEnergyFunctional2D, FieldMinimizer, RealField2D, NoiseGenerator2D, import_field, real_convolution_2d
-from michael960lib.common import ModifyingReadOnlyObjectError, IllegalActionError
+from torusgrid.fields import RealField2D, import_field, real_convolution_2d, FieldStateFunction
+from torusgrid.dynamics import FreeEnergyFunctional2D, NoiseGenerator2D
+
 
 
 class PFCFreeEnergyFunctional(FreeEnergyFunctional2D):
@@ -51,46 +52,27 @@ class PFCFreeEnergyFunctional(FreeEnergyFunctional2D):
     def grand_potential(self, field: RealField2D, mu: float):
         return np.sum(self.grand_potential_density(field, mu)) * field.dV
 
-class PFCStateFunction:
+class PFCStateFunction(FieldStateFunction):
     def __init__(self, Lx, Ly, f, F, psibar, omega=None, Omega=None):
-        self.Lx = Lx
-        self.Ly = Ly
+        super().__init__()
+        self.Lx = self._content['Lx'] = Lx
+        self.Ly = self._content['Ly'] = Ly
+        self.f = self._content['f'] = f
+        self.F = self._content['F'] = F
+        self.psibar = self._content['psibar'] = psibar
+        self.omega = self._content['omega'] = omega
+        self.Omega = self._content['Omega'] = Omega
 
-        self.f = f
-        self.F = F
-        self.psibar = psibar
-
-        self.omega = omega
-        self.Omega = Omega
-
-        self.item_dict = {
-            'Lx': self.Lx,
-            'Ly': self.Ly,
-            'f': self.f,
-            'F': self.F,
-            'omega': self.omega,
-            'Omega': self.Omega,
-            'psibar': self.psibar
-        } 
-
-    def is_grand_canonical(self):
+    def is_grand_canonical(self) -> bool:
         return not (self.omega is None)
 
-
-    def get_item(self, item_name):
-        if not item_name in self.item_dict.keys():
-            raise ValueError(f'{item_name} is not a valid PFC state function')
-        return self.item_dict[item_name]
-
     def to_string(self, state_string_format: Optional[str]=None,
-            float_fmt: str='.3f', pad: int=1, delim: str='|'):
+            float_fmt: str='.3f', pad: int=1, delim: str='|') -> str:
         if not state_string_format is None:
             return state_string_format.format(
                 Lx=self.Lx, Ly=self.Ly, f=self.f, F=self.F, 
                 omega=self.omega, Omega=self.Omega, psibar=self.psibar
             )
-
-
 
         delim_padded = ' '*pad + delim + ' '*pad
         items = ['Lx', 'Ly', 'f', 'F', 'omega', 'Omega', 'psibar']
@@ -102,14 +84,12 @@ class PFCStateFunction:
                 state_func_list.append(f'{item_name}={item:{float_fmt}}')
         return delim_padded.join(state_func_list)
 
-    def export(self) -> str:
-        return self.item_dict
 
 def import_state_function(state: dict) -> PFCStateFunction:
     sf = PFCStateFunction(state['Lx'], state['Ly'], state['f'], state['F'], state['psibar'], state['omega'], state['Omega'])
     return sf
 
-def get_latex(item_name):
+def get_latex(item_name) -> str:
     if not item_name in _item_latex_dict.keys():
         raise ValueError(f'{item_name} is not a valid state function function')
     return _item_latex_dict[item_name]

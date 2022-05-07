@@ -12,98 +12,50 @@ from typing import List, Optional
 
 from michael960lib.math import fourier
 from michael960lib.common import overrides
-
-from torusgrid.fields import FreeEnergyFunctional2D, FieldMinimizer, RealField2D, NoiseGenerator2D, import_field, real_convolution_2d
 from michael960lib.common import ModifyingReadOnlyObjectError, IllegalActionError, experimental
+
+from torusgrid.fields import RealField2D, import_field, real_convolution_2d
+from torusgrid.dynamics import FieldEvolver, NoiseGenerator2D, FreeEnergyFunctional2D, EvolverHistory, FancyEvolver
 
 from .base import PFCStateFunction, PFCFreeEnergyFunctional, import_state_function
 
 import warnings
 
 
-class PFCMinimizer(FieldMinimizer):
+class PFCMinimizer(FancyEvolver):
     def __init__(self, field: RealField2D, dt, eps):
         super().__init__(field)
         self.dt = dt
         self.eps = eps
         self.age = 0
-
-        self.label = 'NULL'
         self.history = PFCMinimizerHistory()
-        self.display_precision = 3
-        self.display_format = None
+
+        self.info['minimizer'] = 'NULL'
+        self.info['dt'] = dt
+        self.info['eps'] = eps
+        self.info['label'] = self.label = f'NULL eps={eps} dt={dt}'
+
+        self.display_format = '[{label}] f={f:.5f} F={F:.5f} psibar={psibar:.5f}'
     
-    def set_display_precision(self, display_precision):
-        self.display_precision = display_precision
+    @overrides(FancyEvolver)
+    def get_evolver_state(self):
+        return {'age': self.age}
 
-    def set_display_format(self, display_format: str):
-        self.display_format = display_format
-
-
-    @overrides(FieldMinimizer)
+    @overrides(FancyEvolver)
     def on_create_progress_bar(self, progress_bar: tqdm.tqdm):
         progress_bar.set_description_str(f'[{self.label}]')
         
     def set_age(self, age):
         self.age = age
 
-    @overrides(FieldMinimizer)
-    def step(self):
-        raise NotImplementedError()
-
-    @overrides(FieldMinimizer)
-    def start(self):
-        super().start()
-        state_function = self.get_state_function()
-        self.history.append_state_function(self.age, state_function)
-
-    @overrides(FieldMinimizer)
-    def on_epoch_end(self, progress_bar: tqdm.tqdm):
-        dp = self.display_precision
-        sf = self.get_state_function()
-
-        if not self.display_format is None:
-            progress_bar.set_description_str(self.display_format.format(
-                label=self.label, age=self.age,
-                Lx=sf.Lx, Ly = sf.Ly, f=sf.f, F=sf.F, omega=sf.omega, Omega=sf.Omega, psibar=sf.psibar
-                )
-            )
-        else:
-            state_function_str = sf.to_string(float_fmt=f'.{dp+4}f')
-            progress_bar.set_description_str(f'[{self.label}][t={self.age:.{dp}f}] {state_function_str}')
-
-        self.history.append_state_function(self.age, sf)
-
-    @overrides(FieldMinimizer)
-    def on_nonstop_epoch_end(self):
-        dp = self.display_precision
-        sf = self.get_state_function()
-        if not self.display_format is None:
-            sys.stdout.write('\r' + self.display_format.format(
-                label=self.label, age=self.age,
-                Lx=sf.Lx, Ly = sf.Ly, f=sf.f, F=sf.F, omega=sf.omega, Omega=sf.Omega, psibar=sf.psibar
-            )
-        )
-        else:
-            state_function_str = sf.to_string(float_fmt=f'.{dp+4}f')
-            sys.stdout.write(f'\r[{self.label}][t={self.age:.{dp}f}] {state_function_str}')
-        self.history.append_state_function(self.age, sf)
-
-    @overrides(FieldMinimizer)
-    def end(self):
-        super().end()
-        self.history.commit(self.label, self.field)
-
-    def get_state_function(self) -> PFCStateFunction:
-        raise NotImplementedError()
-
 
 class ConstantChemicalPotentialMinimizer(PFCMinimizer):
     def __init__(self, field: RealField2D, dt: float, eps: float, mu: float, noise_generator:NoiseGenerator2D=None):
         super().__init__(field, dt, eps)
-        self.label = f'const-mu eps={eps} mu={mu} dt={dt}'
+        self.info['minimizer'] = 'mu'
+        self.info['mu'] = self.mu = mu
+        self.info['label'] = self.label = f'mu eps={eps:.5f} mu={mu:.5f} dt={dt:.5f}'
    
-        self.mu = mu
         self.fef = PFCFreeEnergyFunctional(eps)
         self.noise_generator = noise_generator
 
@@ -115,12 +67,6 @@ class ConstantChemicalPotentialMinimizer(PFCMinimizer):
         self._kernel = 1-2*self.field.K2+self.field.K4 - self.eps
         self._exp_dt_kernel = np.exp(-dt*self._kernel)
         self._mu_dt_half = self.dt * self.mu / 2
-
-    @overrides(PFCMinimizer)
-    def set_display_precision(self, display_precision: int):
-        dp = display_precision
-        super().set_display_precision(dp)
-        self.label = f'const-mu eps={self.eps:.{dp+1}f} mu={self.mu:.{dp+1}f} dt={self.dt:.{dp}f}'
 
     @overrides(PFCMinimizer)
     def step(self):
@@ -153,7 +99,9 @@ class ConstantChemicalPotentialMinimizer(PFCMinimizer):
 class NonlocalConservedMinimizer(PFCMinimizer):
     def __init__(self, field: RealField2D, dt: float, eps: float, noise_generator:NoiseGenerator2D=None):
         super().__init__(field, dt, eps)
-        self.label = f'nonlocal eps={eps} dt={dt}'
+
+        self.info['label'] = self.label = f'nonlocal eps={eps:.5f} dt={dt:.5f}'
+        self.info['minimizer'] = 'nonlocal'
 
         self._kernel = 1-2*self.field.K2+self.field.K4 - self.eps
         self._exp_dt_kernel = np.exp(-dt*self._kernel)
@@ -165,12 +113,6 @@ class NonlocalConservedMinimizer(PFCMinimizer):
             field.initialize_fft()
 
         self.psibar = np.mean(self.field.psi)
-
-    @overrides(PFCMinimizer)
-    def set_display_precision(self, display_precision: int):
-        dp = display_precision
-        super().set_display_precision(dp)
-        self.label = f'nonlocal eps={self.eps:.{dp+1}f} dt={self.dt:.{dp+1}f}'
 
     @overrides(PFCMinimizer)
     def step(self):
@@ -205,7 +147,10 @@ class NonlocalConservedRK4(NonlocalConservedMinimizer):
             k_regularizer=0.1, inertia=100):
         super().__init__(field, dt, eps, noise_generator)
         self.R = k_regularizer
-        self.label = f'nonlocal-rk4 eps={eps} dt={dt} R={k_regularizer} M={inertia}'
+        self.info['minimizer'] = 'nonlocal-rk4'
+        self.info['M'] = inertia
+        self.info['R'] = k_regularizer
+        self.info['label'] = self.label = f'nonlocal-rk4 eps={eps} dt={dt} R={k_regularizer} M={inertia}'
 
         self.field_tmp = self.field.copy()
         self.field_tmp.initialize_fft()
@@ -221,12 +166,6 @@ class NonlocalConservedRK4(NonlocalConservedMinimizer):
         self.dfield_tmp.initialize_fft()
 
         self.inertia = inertia
-
-    @overrides(PFCMinimizer)
-    def set_display_precision(self, display_precision: int):
-        dp = display_precision
-        super().set_display_precision(dp)
-        self.label = f'nonlocal-rk4 eps={self.eps:.{dp+1}f} dt={self.dt:.{dp+1}f} R={self.R:.{dp}f} M={self.inertia:.{dp}f}'
 
     def _psi_dot(self):
         self._deriv.psi[:,:] = -self.fef.derivative(self.field_tmp)
@@ -280,12 +219,6 @@ class ConservedMinimizer(PFCMinimizer):
 
         self.field_tmp = self.field.copy()
 
-    @overrides(PFCMinimizer)
-    def set_display_precision(self, display_precision: int):
-        dp = display_precision
-        super().set_display_precision(dp)
-        self.label = f'nonlocal eps={self.eps:.{dp+1}f} dt={self.dt:.{dp+1}f}'
-
     #@overrides(PFCMinimizer)
     def step(self):
         raise NotImplementedError
@@ -321,6 +254,10 @@ class StressRelaxer(PFCMinimizer):
         super().__init__(field, dt, eps)
         self.f = 1
 
+        self.info['mu'] = mu
+        self.info['label'] = self.label = f'stress-relax eps={eps:.5f} mu={mu:.5f} dt={dt:.5f}'
+        self.info['minimizer'] = 'stress-relax'
+        self.info['expansion_rate'] = expansion_rate
 
         self.dt = dt
         self.eps = eps
@@ -337,12 +274,6 @@ class StressRelaxer(PFCMinimizer):
         self._prepare_minimization()
 
         self.set_display_precision(5)
-
-    @overrides(PFCMinimizer)
-    def set_display_precision(self, display_precision: int):
-        dp = display_precision
-        super().set_display_precision(dp)
-        self.label = f'stress-relax eps={self.eps:.{dp+1}f} mu={self.mu:.{dp+1}f} dt={self.dt:.{dp+1}f}'
 
     def _prepare_minimization(self):
         f = self.field
@@ -458,7 +389,10 @@ class RandomStepMinimizer(PFCMinimizer):
     def __init__(self, field: RealField2D, dt: float, eps: float, mu: float, seed: int):
         super().__init__(field, dt, eps)
         self.target = 'Omega'
-        self.label = 'random eps={eps} mu={mu} dt={dt}'
+
+        self.info['minimizer'] = 'random'
+        self.info['label'] = self.label = 'random eps={eps:.5f} mu={mu:.5f} dt={dt:.5f}'
+
         if mu is None:
             self.target = 'F'
             self.label = 'random eps={eps} dt={dt}'
@@ -471,14 +405,6 @@ class RandomStepMinimizer(PFCMinimizer):
 
         self.random_scale = self.dt**2 * np.sqrt(np.mean(self.fef.derivative(self.field)**2))
         print(f'scale = {self.random_scale}')
-
-    @overrides(PFCMinimizer)
-    def set_display_precision(self, dp):
-        super().set_display_precision(dp)
-        if self.target == 'Omega':
-            self.label = f'random eps={self.eps:.{dp+1}f} mu={self.mu:.{dp+1}f} dt={self.dt:.{dp}f}'
-        else:
-            self.label = f'random eps={self.eps:.{dp+1}f} dt={self.dt:.{dp}f}'
 
     @overrides(PFCMinimizer) 
     def step(self):
@@ -513,24 +439,19 @@ class RandomStepMinimizer(PFCMinimizer):
         return PFCStateFunction(Lx, Ly, f, F, psibar, omega, Omega)
 
 
-
-
-
-
-class PFCMinimizerHistory:
+class PFCMinimizerHistory(EvolverHistory):
     def __init__(self):
+        super().__init__()
         self.t = []
-        self.state_functions = []
         self.age = 0
-        self.label = 'NULL'
-        self.final_field_state = None
-        self.committed = False 
 
-    def append_state_function(self, t, sf: PFCStateFunction):
+    @overrides(EvolverHistory)
+    def append_state_function(self, evolver_state: dict, sf: PFCStateFunction):
         if self.committed:
             raise ModifyingReadOnlyObjectError(
-            f'history object (labe=\'{self.label}\') is already committed and hence not editable', self)
+            f'history object (label=\'{self.label}\') is already committed and hence not editable', self)
 
+        t = evolver_state['age']
         if t < self.age:
             raise IllegalActionError(f'time={t} is smaller than the current recorded time')
 
@@ -538,30 +459,8 @@ class PFCMinimizerHistory:
         self.state_functions.append(sf)
         self.age = t
 
-    def commit(self, label, field: RealField2D):
-        if self.committed:
-            raise IllegalActionError(f'history object (label=\'{self.label}\') is already committed')
-
-        self.label = label
-        self.committed = True 
-        self.final_field_state = field.export_state()
-
-    def is_committed(self):
-        return self.committed
-
     def get_t(self):
         return self.t
-
-    def get_state_functions(self) -> List[PFCStateFunction]:
-        return self.state_functions
-
-    def get_final_field_state(self):
-        if not self.committed:
-            raise IllegalActionError('cannot get final state from uncommitted PFC minimizer history')
-        return self.final_field_state
-
-    def get_label(self):
-        return self.label
 
     def export(self) -> dict:
         if self.committed:

@@ -4,6 +4,11 @@ from pprint import pprint
 from . import static
 from torusgrid import fields as fd
 import warnings
+from typing import Tuple, Optional, Union
+from enum import Enum
+from torusgrid.fields import RealField2D
+from .. import pfc
+from ..core.evolution import PFCMinimizer
 
 from michael960lib.common import deprecated
 
@@ -18,7 +23,7 @@ def generate(na, nb):
 
     return theta, Lx, Ly
 
-def generate_minimal(na: int, nb: int):
+def generate_minimal(na: int, nb: int) -> Tuple[float, float, float]:
     # diameter
     D = np.pi * 4 / np.sqrt(3)
 
@@ -41,31 +46,71 @@ def generate_minimal(na: int, nb: int):
     Lx = np.sqrt(v2[0]**2+v2[1]**2)
     Ly = np.sqrt(v1[0]**2+v1[1]**2)
 
-
-
     return theta, Lx, Ly
 
+class AutoDimMode(Enum):
+    SCALE = 0
+    SNAP = 1
 
-def generate_eps(na: int, nb: int, Nx: int, Ny: int, eps_str: str):
+def generate_eps(na: int, nb: int, eps_str: str, 
+        NxNy: Union[Tuple[int, int], AutoDimMode]=AutoDimMode.SCALE,
+        minimize: Optional[Tuple[float, int]]=None) -> Tuple[float, RealField2D, RealField2D]:
     theta, Lx, Ly = generate_minimal(na, nb)
 
-    unit0 = static.get_relaxed_minimized_coexistent_unit_cell(eps_str)
-    Lx0 = unit0.Lx
-    Ly0 = unit0.Ly
-    Nx0 = unit0.Nx
-    Ny0 = unit0.Ny
+    sol0 = static.get_relaxed_minimized_coexistent_unit_cell(eps_str, liquid=False)
+    liq0 = static.get_relaxed_minimized_coexistent_unit_cell(eps_str, liquid=True)
+    mu = static.get_coexistent_mu_final(eps_str)
+    eps = float(eps_str)
 
-    unitr = fd.RealField2D(Lx, Ly, Nx, Ny)
 
-    Xr = np.cos(theta) * unitr.X - np.sin(theta) * unitr.Y
-    Yr = np.sin(theta) * unitr.X + np.cos(theta) * unitr.Y
+    Lx0 = sol0.Lx
+    Ly0 = sol0.Ly
+    Nx0 = sol0.Nx
+    Ny0 = sol0.Ny
+
+    _density = np.sqrt(Nx0*Ny0/Lx0/Ly0)
+
+
+    try:
+        if NxNy is AutoDimMode.SCALE:
+            Nx = np.rint(Lx0*_density)
+            Ny = np.rint(Ly0*_density)
+
+        elif NxNy is AutoDimMode.SNAP:
+            Nx = 2 ** int(np.rint(np.log2(Lx0*_density)))
+            Ny = 2 ** int(np.rint(np.log2(Ly0*_density)))
+        
+        else:
+            assert isinstance(NxNy, tuple)
+            assert len(NxNy) == 2
+            assert type(NxNy[0]) is type(NxNy[1]) is int
+            Nx = NxNy[0]
+            Ny = NxNy[1]
+    except AssertionError:
+        raise ValueError('NxNy must be a tuple of 2 integers (Nx, Ny) or an instance of AutoDimMode')
+
+
+    sol = fd.RealField2D(Lx, Ly, Nx, Ny)
+    liq = fd.RealField2D(Lx, Ly, Nx, Ny)
+
+    Xr = np.cos(theta) * sol.X - np.sin(theta) * sol.Y
+    Yr = np.sin(theta) * sol.X + np.cos(theta) * sol.Y
 
     Ir = (Xr / Lx0 * Nx0).astype(int) % Nx0
     Jr = (Yr / Ly0 * Ny0).astype(int) % Ny0
     
-    psi = unit0.psi[Ir,Jr] 
-    unitr.set_psi(psi)
-    return theta, unitr
+    sol_psi = sol0.psi[Ir,Jr] 
+    liq_psi = liq0.psi[Ir,Jr] 
+    sol.set_psi(sol_psi)
+    liq.set_psi(liq_psi)
+
+    if minimize is not None:
+        model_sol = pfc.PFC(sol)
+        model_sol.evolve(minimizer='mu', dt=minimize[0], eps=eps, mu=mu, N_epochs=minimize[1])
+        model_liq = pfc.PFC(liq)
+        model_liq.evolve(minimizer='mu', dt=minimize[0], eps=eps, mu=mu, N_epochs=minimize[1])
+    model_sol.plot_history()
+    return theta, sol, liq
 
 
 # generate a minimized solid profile for mu=0.195 eps=0.1

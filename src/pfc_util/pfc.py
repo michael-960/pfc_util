@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 from torusgrid import fields as fd
+import torusgrid as tg
+
 from .core.evolution import ConstantChemicalPotentialMinimizer, NonlocalConservedMinimizer, StressRelaxer, PFCMinimizer
+from .core.base import PFCStateFunction
 from michael960lib.common import IllegalActionError, scalarize
 from .history import PFCHistory, PFCMinimizerHistoryBlock, PFCEditActionHistoryBlock, import_history
 
 from typing import Optional, Union, Callable, List
+
 from matplotlib import pyplot as plt
-from matplotlib.patches import Rectangle
-from matplotlib.widgets import Slider
-import matplotlib.gridspec as gridspec
 import matplotlib
+
 import numpy as np
 import warnings
 
@@ -53,13 +55,14 @@ class PFC:
         self.current_minimizer = StressRelaxer(self.field, dt, eps, mu)
 
     def evolve_multisteps(self, N_steps, N_epochs,
-            display_precision: int=3, display_format: Optional[str]=None):
-        if self.current_minimizer is None:
-            raise fd.MinimizerError(self.current_minimizer) 
+            display_format: Optional[str]=None,
+            callbacks: List[Callable[[PFCMinimizer, PFCStateFunction], None]]=[]):
 
-        self.current_minimizer.set_display_precision(display_precision)
+        if self.current_minimizer is None:
+            raise tg.dynamics.MinimizerError(self.current_minimizer) 
+
         self.current_minimizer.set_display_format(display_format)
-        self.current_minimizer.run_multisteps(N_steps, N_epochs)
+        self.current_minimizer.run_multisteps(N_steps, N_epochs, callbacks=callbacks)
 
         self.history_pointer += 1
         self.age += self.current_minimizer.age
@@ -67,13 +70,15 @@ class PFC:
         self.current_minimizer = None
 
     def evolve_nonstop(self, N_steps, custom_keyboard_interrupt_handler=None,
-            display_precision: int=3, display_format: Optional[str]=None):
-        if self.current_minimizer is None:
-            raise fd.MinimizerError(self.current_minimizer) 
+            display_format: Optional[str]=None,
+            callbacks: List[Callable[[PFCMinimizer, PFCStateFunction], None]]=[]):
 
-        self.current_minimizer.set_display_precision(display_precision)
+        if self.current_minimizer is None:
+            raise tg.dynamics.MinimizerError(self.current_minimizer) 
+
         self.current_minimizer.set_display_format(display_format)
-        self.current_minimizer.run_nonstop(N_steps, custom_keyboard_interrupt_handler)
+        self.current_minimizer.run_nonstop(N_steps, custom_keyboard_interrupt_handler=custom_keyboard_interrupt_handler, 
+                callbacks=callbacks)
 
         self.history_pointer += 1
         self.age += self.current_minimizer.age
@@ -86,7 +91,8 @@ class PFC:
         expansion_rate: Optional[float]=None,
         N_steps: int=31, N_epochs: Optional[int]=None,
         custom_keyboard_interrupt_handler: Optional[Callable[[PFCMinimizer], bool]]=None,
-        display_precision: int=3, display_format: Optional[str]=None):
+        display_format: Optional[str]=None, 
+        callbacks: List[Callable[[PFCMinimizer, PFCStateFunction], None]]=[]):
 
         if not minimizer_supplier is None:
             if None not in (minimizer, dt, eps, mu, expansion_rate):
@@ -129,11 +135,12 @@ class PFC:
 
         if N_epochs is None:
             self.evolve_nonstop(N_steps, custom_keyboard_interrupt_handler=custom_keyboard_interrupt_handler,
-                    display_precision=display_precision, display_format=display_format)
+                    display_format=display_format, callbacks=callbacks)
         else:
             if N_epochs <=0:
                 raise ValueError(f'N_epochs must be a positive integer')
-            self.evolve_multisteps(N_steps, N_epochs, display_precision=display_precision, display_format=display_format)
+            self.evolve_multisteps(N_steps, N_epochs, display_format=display_format,
+                    callbacks=callbacks)
 
     def field_snapshot(self):
         return self.field.export_state()     
@@ -241,8 +248,6 @@ def load_pfc_group(path: str) -> PFCGroup:
         g.put(model, name, attrs=attrs)
     return g
 
-     
-     
 
 
 
