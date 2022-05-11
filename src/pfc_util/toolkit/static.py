@@ -26,6 +26,7 @@ _uc_path_map = {
 
 _liq_path_map = {
     '0.04': 'uc_eps0.04_liq.field',
+    '0.06': 'uc_eps0.06_liq.field',
     '0.08': 'uc_eps0.08_liq.field',
     '0.1': 'uc_eps0.1_liq.field',
     '0.2': 'uc_eps0.2_liq.field',
