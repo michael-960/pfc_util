@@ -1,12 +1,13 @@
-import numpy as np
-from torusgrid.fields import RealField2D
-from torusgrid.field_util import liquefy
-from torusgrid import field_util as fu
+from typing import Optional, Callable, List
 
-from ..pfc import PFC
+import numpy as np
+
+from torusgrid.fields import RealField2D
+from torusgrid import field_util as fu
 from ..core.base import PFCFreeEnergyFunctional
 from ..core.evolution import PFCMinimizer
-from typing import Optional, Callable, List
+from ..pfc import PFC
+
 
 
 def find_coexistent_mu(solid_field: RealField2D, eps: float, mu_min: float, mu_max: float, 
@@ -20,11 +21,10 @@ def find_coexistent_mu(solid_field: RealField2D, eps: float, mu_min: float, mu_m
 
     fef = PFCFreeEnergyFunctional(eps)
     model_s = PFC(solid_field)
-    model_l = PFC(liquefy(solid_field))
+    model_l = PFC(fu.liquefy(solid_field))
 
     solid_psi = model_s.field.psi.copy()
     liquid_psi = model_l.field.psi.copy()
-
     
     rec = {'mu': [], 'omega_s': [], 'omega_l': [], 'mu_min_initial': mu_min, 'mu_max_initial': mu_max}
     
@@ -37,10 +37,10 @@ def find_coexistent_mu(solid_field: RealField2D, eps: float, mu_min: float, mu_m
         print(f'current bounds: {mu_min} ~ {mu_max}')
 
         if relax:
-            model_s.evolve('relax', 0.001, eps, mu, expansion_rate=1., **minimizer_kwargs)
+            model_s.evolve(minimizer='relax', dt=0.001, eps=eps, mu=mu, expansion_rate=1., **minimizer_kwargs)
             model_l.field.set_size(model_s.field.Lx, model_s.field.Ly)
 
-        model_s.evolve('mu', 0.001, eps, mu, **minimizer_kwargs)
+        model_s.evolve(minimizer='mu', dt=0.001, eps=eps, mu=mu, **minimizer_kwargs)
         omega_s = fef.mean_grand_potential_density(model_s.field, mu)
 
         if is_liquid(model_s.field.psi, tol=1e-4):
@@ -50,7 +50,7 @@ def find_coexistent_mu(solid_field: RealField2D, eps: float, mu_min: float, mu_m
             #model_s.field.set_psi(solid_psi)
             #continue
 
-        model_l.evolve('mu', 0.001, eps, mu, **minimizer_kwargs)
+        model_l.evolve(minimizer='mu', dt=0.001, eps=eps, mu=mu, **minimizer_kwargs)
         omega_l = fef.mean_grand_potential_density(model_l.field, mu)
 
         rec['mu'].append(mu)
@@ -80,11 +80,9 @@ def evolve_and_elongate_interface(
         ifc: RealField2D, delta_sol: RealField2D, delta_liq: RealField2D,
         minimizer_supplier: Callable[[PFC], PFCMinimizer]=None,
         minimizer: str=None, dt: float=None, eps: float=None, mu: float=None, 
-        N_steps: int=31, N_epochs: Optional[int]=None,
-        display_precision: int=3, display_format: Optional[str]=None,
-        callbacks: List[Callable]=[],
-        verbose=False
-        ):
+        N_steps: int=31, N_epochs: Optional[int]=None, interrupt_handler: Optional[Callable]=None,
+        display_format: Optional[str]=None, callbacks: List[Callable]=[],
+        verbose=False):
 
     try:
         assert delta_sol.Ny == delta_liq.Ny == ifc.Ny
@@ -93,15 +91,15 @@ def evolve_and_elongate_interface(
         raise ValueError('delta_sol, delta_liq, and ifc must have the same Y dimensions')
 
 
-    dp = display_precision
     if verbose:
-        print(f'Lx={ifc.Lx:.{dp+2}f}, Ly={ifc.Ly:.{dp+2}f}')
+        print(f'Lx={ifc.Lx}, Ly={ifc.Ly}')
         print(f'evolving interface')
     model = PFC(ifc)
 
     model.evolve(
             minimizer_supplier=minimizer_supplier,
             minimizer=minimizer, dt=dt, eps=eps, mu=mu, N_steps=N_steps, N_epochs=N_epochs, 
+            custom_keyboard_interrupt_handler=interrupt_handler,
             display_format=display_format, callbacks=callbacks
     )
 
@@ -119,7 +117,7 @@ def evolve_and_elongate_interface(
     ifc_elongated = fu.concat(tmp, delta_liq)
 
     if verbose:
-        print(f'Lx={ifc_elongated.Lx:.{dp+2}f}, Ly={ifc_elongated.Ly:.{dp+2}f}')
+        print(f'Lx={ifc_elongated.Lx}, Ly={ifc_elongated.Ly}')
     return model, ifc_elongated
 
 

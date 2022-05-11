@@ -1,25 +1,21 @@
 from __future__ import annotations
-
-from torusgrid import fields as fd
-import torusgrid as tg
-
-from .core.evolution import ConstantChemicalPotentialMinimizer, NonlocalConservedMinimizer, StressRelaxer, PFCMinimizer
-from .core.base import PFCStateFunction
-from michael960lib.common import IllegalActionError, scalarize
-from .history import PFCHistory, PFCMinimizerHistoryBlock, PFCEditActionHistoryBlock, import_history
-
+import warnings
 from typing import Optional, Union, Callable, List
 
-from matplotlib import pyplot as plt
-import matplotlib
-
 import numpy as np
-import warnings
+import matplotlib
+from matplotlib import pyplot as plt
+import shutil
 
+from michael960lib.common import IllegalActionError, scalarize
+from torusgrid import fields as fd
+import torusgrid as tg
+from .core.evolution import ConstantChemicalPotentialMinimizer, NonlocalConservedMinimizer, StressRelaxer, PFCMinimizer
+from .core.base import PFCStateFunction
+from .history import PFCHistory, PFCMinimizerHistoryBlock, PFCEditActionHistoryBlock, import_history
 
 matplotlib.use('TKAgg')
 matplotlib.style.use('fast')
-
 
 
 class PFC:
@@ -179,9 +175,12 @@ class PFC:
 
         return state
     
-    def save(self, path):
+    def save(self, path: str):
         state = self.export()
-        np.savez(path, state=state)
+
+        tmp_name = f'{path}.tmp.file'
+        np.savez(tmp_name, state=state)
+        shutil.move(f'{tmp_name}.npz', f'{path}.pfc')
 
     def save_hdf5(self, path):
         raise NotImplementedError
@@ -214,15 +213,19 @@ class PFCGroup:
         self.models = dict()
     
     def put(self, model: PFC, name: str, attrs=dict()):
+        if name in self.get_names():
+            warnings.warn(f'key {name} already exists in group and will be overwritten')
         self.models[name] = {'model': model, 'attrs': attrs}
 
     def save(self, path):
         data = dict() 
+        tmp_name = f'{path}.tmp.file'
         for name in self.models:
             model_state = self.models[name]['model'].export()
             attrs = self.models[name]['attrs']
             data[name] = {'model': model_state, 'attrs': attrs}
-        np.savez(path, **data)
+        np.savez(tmp_name, **data)
+        shutil.move(f'{tmp_name}.npz', f'{path}.pfcgroup')
 
     def get_names(self) -> List[str]:
         return list(self.models.keys())
@@ -233,6 +236,28 @@ class PFCGroup:
     def get_attrs(self, name) -> dict:
         return self.models[name]['attrs']
 
+    def get_models(self) -> list:
+        l = []
+        for key in self.models:
+            l.append(self.models[key]['model'])
+        return l
+
+    def get_sorted_models(self, comparator: str, reverse: bool=False) -> List[PFC]:
+        def get_item(model):
+
+            try:
+                val = {
+                        'Lx': model.field.Lx,
+                        'Ly': model.field.Ly,
+                        'Nx': model.field.Nx,
+                        'Ny': model.field.Ny
+                }[comparator]
+            except KeyError:
+                raise ValueError(f'{comparator} is not a valid attribute')
+            return val
+
+        models = self.get_models()
+        return sorted(models, key=get_item, reverse=reverse)
 
 
 def load_pfc_group(path: str) -> PFCGroup:
@@ -247,9 +272,4 @@ def load_pfc_group(path: str) -> PFCGroup:
 
         g.put(model, name, attrs=attrs)
     return g
-
-
-
-
-
 

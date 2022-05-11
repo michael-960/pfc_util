@@ -1,25 +1,24 @@
-import numpy as np
-from matplotlib import pyplot as plt
-from scipy.fft import fft2, ifft2, rfft2, irfft2, set_global_backend
-from pprint import pprint
-import tqdm
-
-import pyfftw
 import time
 import threading
 import sys
+import warnings
+from pprint import pprint
+import tqdm
 from typing import List, Optional
 
+import numpy as np
+from matplotlib import pyplot as plt
+from scipy.fft import fft2, ifft2, rfft2, irfft2, set_global_backend
+import pyfftw
+
 from michael960lib.math import fourier
-from michael960lib.common import overrides
-from michael960lib.common import ModifyingReadOnlyObjectError, IllegalActionError, experimental
-
-from torusgrid.fields import RealField2D, import_field, real_convolution_2d
-from torusgrid.dynamics import FieldEvolver, NoiseGenerator2D, FreeEnergyFunctional2D, EvolverHistory, FancyEvolver
-
+from michael960lib.common import overrides, experimental, deprecated
+from michael960lib.common import ModifyingReadOnlyObjectError, IllegalActionError
+from torusgrid.fields import RealField2D, import_field
+from torusgrid.dynamics import FieldEvolver, FancyEvolver, NoiseGenerator2D, FreeEnergyFunctional2D, EvolverHistory
 from .base import PFCStateFunction, PFCFreeEnergyFunctional, import_state_function
 
-import warnings
+
 
 
 class PFCMinimizer(FancyEvolver):
@@ -30,7 +29,9 @@ class PFCMinimizer(FancyEvolver):
         self.age = 0
         self.history = PFCMinimizerHistory()
 
+        self.info['system'] = 'pfc'
         self.info['minimizer'] = 'NULL'
+
         self.info['dt'] = dt
         self.info['eps'] = eps
         self.info['label'] = self.label = f'NULL eps={eps} dt={dt}'
@@ -200,6 +201,84 @@ class NonlocalConservedRK4(NonlocalConservedMinimizer):
         self.dfield.psi += self.dt / 6 * (l1 + 2*l2 + 2*l3 + l4)
  
 
+class NonlocalConservedRK4Plain(NonlocalConservedRK4):
+    def __init__(self, field, dt, eps,
+            noise_generator: Optional[NoiseGenerator2D]=None,
+            k_regularizer=0.1):
+        super().__init__(field, dt, eps, noise_generator, k_regularizer, 0)
+
+    def _psi_dot(self):
+        self._deriv.psi[:,:] = -self.fef.derivative(self.field_tmp)
+        self._deriv.fft2()
+        self._deriv.psi_k *= np.exp(-self.R*self._deriv.K2)
+        self._deriv.ifft2()
+        F = self._deriv.psi - np.mean(self._deriv.psi)
+        return F
+
+    @overrides(NonlocalConservedMinimizer)
+    def step(self):
+        self.age += self.dt
+        self.field_tmp.psi[:] = self.field.psi
+
+        k1 = self._psi_dot()
+        self.field_tmp.psi += k1*self.dt/2
+
+        k2 = self._psi_dot()
+        self.field_tmp.psi += k2*self.dt/2
+
+        k3 = self._psi_dot()
+        self.field_tmp.psi += k3*self.dt
+
+        k4 = self._psi_dot()
+
+        self.field.psi += self.dt / 6 * (k1 + 2*k2 + 2*k3 + k4)
+
+
+class NonlocalDescent(NonlocalConservedMinimizer):
+    def __init__(self, field: RealField2D, dt: float, eps: float,
+            noise_generator: Optional[NoiseGenerator2D]=None,
+            k_regularizer=0.1):
+        super().__init__(field, dt, eps, noise_generator)
+        self.R = k_regularizer
+        self.info['minimizer'] = 'nonlocal-desc'
+        self.info['R'] = k_regularizer
+        self.info['label'] = self.label = f'nonlocal-desc eps={eps} dt={dt} R={k_regularizer}'
+
+        self.field_tmp = self.field.copy()
+        self.field_tmp.initialize_fft()
+
+        self._deriv = RealField2D(field.Lx, field.Ly, field.Nx, field.Ny)
+        self._deriv.initialize_fft()
+
+    def _psi_dot(self):
+        self._deriv.psi[:,:] = -self.fef.derivative(self.field_tmp)
+        self._deriv.fft2()
+        self._deriv.psi_k *= np.exp(-self.R*self._deriv.K2)
+        self._deriv.ifft2()
+        F = self._deriv.psi - np.mean(self._deriv.psi)
+        return F
+
+    @overrides(NonlocalConservedMinimizer)
+    def step(self):
+        self.age += self.dt
+        self.field_tmp.psi[:,:] = self.field.psi[:,:]
+        F = self._psi_dot()
+        cutoff = 0.01 * self.dt
+
+        dT = self.dt / (np.sum(F**2)*self.field.dV + cutoff)
+        self.field.psi += F * dT
+
+
+class NonlocalTeleporter(NonlocalConservedRK4):
+    def __init__(self, dt, eps):
+        super().__init__(field, dt, eps, inertia=0)
+
+    @overrides(NonlocalConservedMinimizer)
+    def step(self):
+        raise NotImplementedError
+ 
+
+
 class ConservedMinimizer(PFCMinimizer):
     @experimental('Local conserved minimizer is not implemented yet')
     def __init__(self, field: RealField2D, dt: float, eps: float, noise_generator:NoiseGenerator2D=None):
@@ -273,7 +352,6 @@ class StressRelaxer(PFCMinimizer):
 
         self._prepare_minimization()
 
-        self.set_display_precision(5)
 
     def _prepare_minimization(self):
         f = self.field
@@ -439,6 +517,9 @@ class RandomStepMinimizer(PFCMinimizer):
         return PFCStateFunction(Lx, Ly, f, F, psibar, omega, Omega)
 
 
+
+
+
 class PFCMinimizerHistory(EvolverHistory):
     def __init__(self):
         super().__init__()
@@ -485,9 +566,6 @@ def import_minimizer_history(state: dict) -> PFCMinimizerHistory:
     mh.t = state['t']
     mh.committed = True
     return mh
-
-
- 
 
 
 

@@ -1,10 +1,10 @@
 import numpy as np
 from matplotlib import pyplot as plt
-from scipy.fft import fft2, ifft2, rfft2, irfft2, set_global_backend
+from scipy.fft import rfft2, irfft2
+import pyfftw
+
 from pprint import pprint
 import tqdm
-
-import pyfftw
 import time
 import threading
 import sys
@@ -12,10 +12,8 @@ from typing import List, Optional
 
 from michael960lib.math import fourier
 from michael960lib.common import overrides, ModifyingReadOnlyObjectError, IllegalActionError
-
 from torusgrid.fields import RealField2D, import_field, real_convolution_2d, FieldStateFunction
 from torusgrid.dynamics import FreeEnergyFunctional2D, NoiseGenerator2D
-
 
 
 class PFCFreeEnergyFunctional(FreeEnergyFunctional2D):

@@ -1,16 +1,19 @@
-import numpy as np
-from matplotlib import pyplot as plt
+from enum import Enum
 from pprint import pprint
-from . import static
-from torusgrid import fields as fd
 import warnings
 from typing import Tuple, Optional, Union
-from enum import Enum
-from torusgrid.fields import RealField2D
-from .. import pfc
-from ..core.evolution import PFCMinimizer
+
+import numpy as np
+from matplotlib import pyplot as plt
 
 from michael960lib.common import deprecated
+from torusgrid import fields as fd
+from torusgrid.fields import RealField2D
+from . import static
+from ..core.evolution import PFCMinimizer
+from .. import pfc
+
+
 
 def generate(na, nb):
     v1 = ((na+nb)*2*np.pi, (na-nb)*2*np.pi/np.sqrt(3))
@@ -77,8 +80,8 @@ def generate_eps(na: int, nb: int, eps_str: str,
             Ny = np.rint(Ly0*_density)
 
         elif NxNy is AutoDimMode.SNAP:
-            Nx = 2 ** int(np.rint(np.log2(Lx0*_density)))
-            Ny = 2 ** int(np.rint(np.log2(Ly0*_density)))
+            Nx = 2 ** int(np.rint(np.log2(Lx*_density)))
+            Ny = 2 ** int(np.rint(np.log2(Ly*_density)))
         
         else:
             assert isinstance(NxNy, tuple)
@@ -104,12 +107,12 @@ def generate_eps(na: int, nb: int, eps_str: str,
     sol.set_psi(sol_psi)
     liq.set_psi(liq_psi)
 
+    dfmt = '[{system}][{label}][t={age:.2f}] f={f:.10f} F={F:.10f} omega={omega:.10f} Omega={Omega:.10f} psibar={psibar:.10f}'
     if minimize is not None:
         model_sol = pfc.PFC(sol)
-        model_sol.evolve(minimizer='mu', dt=minimize[0], eps=eps, mu=mu, N_epochs=minimize[1])
+        model_sol.evolve(minimizer='mu', dt=minimize[0], eps=eps, mu=mu, N_epochs=minimize[1], display_format=dfmt)
         model_liq = pfc.PFC(liq)
-        model_liq.evolve(minimizer='mu', dt=minimize[0], eps=eps, mu=mu, N_epochs=minimize[1])
-    model_sol.plot_history()
+        model_liq.evolve(minimizer='mu', dt=minimize[0], eps=eps, mu=mu, N_epochs=minimize[1], display_format=dfmt)
     return theta, sol, liq
 
 

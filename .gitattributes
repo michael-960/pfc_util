@@ -4,4 +4,5 @@
 *.hdf5 binary
 *.png binary
 *.jpg binary
-
+*.field binary
+*.pfc binary

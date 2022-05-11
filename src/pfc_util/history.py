@@ -1,20 +1,17 @@
-from torusgrid import field_util
-from torusgrid import fields as fd
-
-from torusgrid.fields import RealField2D
-from .core.base import PFCStateFunction, get_latex
-from .core.evolution import PFCMinimizerHistory, import_minimizer_history
-
-from michael960lib.common import IllegalActionError, with_type
-
 from typing import List, Dict
 
+import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.patches import Rectangle
 from matplotlib.widgets import Slider
 import matplotlib.gridspec as gridspec
 
-import numpy as np
+from michael960lib.common import IllegalActionError, with_type
+from torusgrid import field_util
+from torusgrid import fields as fd
+from torusgrid.fields import RealField2D
+from .core.base import PFCStateFunction, get_latex
+from .core.evolution import PFCMinimizerHistory, import_minimizer_history
 
 
 _default_colors = ['steelblue', 'darkseagreen', 'palevioletred', 'burlywood']
