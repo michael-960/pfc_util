@@ -29,6 +29,8 @@ src/pfc_util/toolkit/profile_editor.py
 src/pfc_util/toolkit/routine.py
 src/pfc_util/toolkit/static.py
 src/pfc_util/toolkit/_res/__init__.py
+src/pfc_util/toolkit/_res/uc_eps0.02.field
+src/pfc_util/toolkit/_res/uc_eps0.02_liq.field
 src/pfc_util/toolkit/_res/uc_eps0.04.field
 src/pfc_util/toolkit/_res/uc_eps0.04_liq.field
 src/pfc_util/toolkit/_res/uc_eps0.06.field
