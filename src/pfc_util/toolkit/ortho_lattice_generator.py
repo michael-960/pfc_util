@@ -60,6 +60,10 @@ def generate_eps(na: int, nb: int, eps_str: str,
         minimize: Optional[Tuple[float, int]]=None) -> Tuple[float, RealField2D, RealField2D]:
     theta, Lx, Ly = generate_minimal(na, nb)
 
+    f = static.get_relaxed_unit_cell_size(eps_str)
+    Lx *= f[0]
+    Ly *= f[1]
+
     sol0 = static.get_relaxed_minimized_coexistent_unit_cell(eps_str, liquid=False)
     liq0 = static.get_relaxed_minimized_coexistent_unit_cell(eps_str, liquid=True)
     mu = static.get_coexistent_mu_final(eps_str)

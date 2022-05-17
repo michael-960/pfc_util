@@ -10,7 +10,7 @@ from ..pfc import PFC
 
 
 
-def find_coexistent_mu(solid_field: RealField2D, eps: float, mu_min: float, mu_max: float, 
+def find_coexistent_mu(solid_field: RealField2D, dt: float, eps: float, mu_min: float, mu_max: float, 
         relax=True, max_iters: int=None, precision: float=0., **minimizer_kwargs) -> dict:
 
     if mu_min >= mu_max:
@@ -37,10 +37,10 @@ def find_coexistent_mu(solid_field: RealField2D, eps: float, mu_min: float, mu_m
         print(f'current bounds: {mu_min} ~ {mu_max}')
 
         if relax:
-            model_s.evolve(minimizer='relax', dt=0.001, eps=eps, mu=mu, expansion_rate=1., **minimizer_kwargs)
+            model_s.evolve(minimizer='relax', dt=dt, eps=eps, mu=mu, expansion_rate=1., **minimizer_kwargs)
             model_l.field.set_size(model_s.field.Lx, model_s.field.Ly)
 
-        model_s.evolve(minimizer='mu', dt=0.001, eps=eps, mu=mu, **minimizer_kwargs)
+        model_s.evolve(minimizer='mu', dt=dt, eps=eps, mu=mu, **minimizer_kwargs)
         omega_s = fef.mean_grand_potential_density(model_s.field, mu)
 
         if is_liquid(model_s.field.psi, tol=1e-4):
