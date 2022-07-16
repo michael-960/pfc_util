@@ -15,7 +15,7 @@ from michael960lib.math import fourier
 from michael960lib.common import overrides, experimental, deprecated
 from michael960lib.common import ModifyingReadOnlyObjectError, IllegalActionError
 from torusgrid.fields import RealField2D, import_field
-from torusgrid.dynamics import FieldEvolver, FancyEvolver, NoiseGenerator2D, FreeEnergyFunctional2D, EvolverHistory
+from torusgrid.dynamics import FancyEvolver, NoiseGenerator2D, FreeEnergyFunctional2D, EvolverHistory
 from .base import PFCStateFunction, PFCFreeEnergyFunctional, import_state_function
 
 
@@ -78,9 +78,9 @@ class ConstantChemicalPotentialMinimizer(PFCMinimizer):
         self.field.psi[:] += self._mu_dt_half
         self.field.psi /=np.sqrt(1+self.field.psi**2*self.dt)
         
-        self.field.fft2()
+        self.field.fft()
         self.field.psi_k *= self._exp_dt_kernel
-        self.field.ifft2()
+        self.field.ifft()
 
         self.field.psi /= np.sqrt(1+self.field.psi**2*self.dt)
         self.field.psi[:] += self._mu_dt_half
@@ -125,9 +125,9 @@ class NonlocalConservedMinimizer(PFCMinimizer):
         self.field.psi /= np.sqrt(1+self.field.psi**2*self.dt)
         self.field.psi += - np.mean(self.field.psi) + self.psibar
 
-        self.field.fft2()
+        self.field.fft()
         self.field.psi_k *= self._exp_dt_kernel
-        self.field.ifft2()
+        self.field.ifft()
         self.field.psi += - np.mean(self.field.psi) + self.psibar
 
         self.field.psi /= np.sqrt(1+self.field.psi**2*self.dt)
@@ -170,9 +170,9 @@ class NonlocalConservedRK4(NonlocalConservedMinimizer):
 
     def _psi_dot(self):
         self._deriv.psi[:,:] = -self.fef.derivative(self.field_tmp)
-        self._deriv.fft2()
+        self._deriv.fft()
         self._deriv.psi_k *= np.exp(-self.R*self._deriv.K2)
-        self._deriv.ifft2()
+        self._deriv.ifft()
         F = self._deriv.psi - np.mean(self._deriv.psi)
         return self.dfield_tmp.psi*self.inertia, -(self.dfield_tmp.psi - F)
 
@@ -209,9 +209,9 @@ class NonlocalConservedRK4Plain(NonlocalConservedRK4):
 
     def _psi_dot(self):
         self._deriv.psi[:,:] = -self.fef.derivative(self.field_tmp)
-        self._deriv.fft2()
+        self._deriv.fft()
         self._deriv.psi_k *= np.exp(-self.R*self._deriv.K2)
-        self._deriv.ifft2()
+        self._deriv.ifft()
         F = self._deriv.psi - np.mean(self._deriv.psi)
         return F
 
@@ -252,9 +252,9 @@ class NonlocalDescent(NonlocalConservedMinimizer):
 
     def _psi_dot(self):
         self._deriv.psi[:,:] = -self.fef.derivative(self.field_tmp)
-        self._deriv.fft2()
+        self._deriv.fft()
         self._deriv.psi_k *= np.exp(-self.R*self._deriv.K2)
-        self._deriv.ifft2()
+        self._deriv.ifft()
         F = self._deriv.psi - np.mean(self._deriv.psi)
         return F
 
@@ -309,9 +309,9 @@ class ConservedMinimizer(PFCMinimizer):
         self.field.psi /= np.sqrt(1+self.field.psi**2*self.dt)
         self.field.psi += - np.mean(self.field.psi) + self.psibar
 
-        self.field.fft2()
+        self.field.fft()
         self.field.psi_k *= self._exp_dt_kernel
-        self.field.ifft2()
+        self.field.ifft()
         self.field.psi += - np.mean(self.field.psi) + self.psibar
 
         self.field.psi /= np.sqrt(1+self.field.psi**2*self.dt)
@@ -390,7 +390,7 @@ class StressRelaxer(PFCMinimizer):
         f.psi += self._mu_dt_half
         f.psi /=np.sqrt(1+f.psi**2*self.dt)
         
-        f.fft2()
+        f.fft()
 
         _kernel = 1-2*self.K2+self.K4 - self.eps
         _exp_dt_kernel = np.exp(-self.dt*_kernel/2)
@@ -402,7 +402,7 @@ class StressRelaxer(PFCMinimizer):
         _exp_dt_kernel = np.exp(-self.dt*_kernel/2)
         f.psi_k *= _exp_dt_kernel
 
-        f.ifft2()
+        f.ifft()
 
         f.psi /= np.sqrt(1+self.field.psi**2*self.dt)
         f.psi += self._mu_dt_half
@@ -515,7 +515,6 @@ class RandomStepMinimizer(PFCMinimizer):
             Omega = self.fef.grand_potential(self.field, self.mu)
 
         return PFCStateFunction(Lx, Ly, f, F, psibar, omega, Omega)
-
 
 
 

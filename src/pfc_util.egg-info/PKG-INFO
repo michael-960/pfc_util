@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: pfc-util
-Version: 0.2.8
+Version: 0.2.9
 Summary: package for PFC (phase field crystal) simulations
 Home-page: https://github.com/michael-960/pfc_util
 Author: Michael Wang

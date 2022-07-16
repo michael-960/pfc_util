@@ -12,7 +12,7 @@ from typing import List, Optional
 
 from michael960lib.math import fourier
 from michael960lib.common import overrides, ModifyingReadOnlyObjectError, IllegalActionError
-from torusgrid.fields import RealField2D, import_field, real_convolution_2d, FieldStateFunction
+from torusgrid.fields import RealField2D, import_field, FieldStateFunction
 from torusgrid.dynamics import FreeEnergyFunctional2D, NoiseGenerator2D
 
 
@@ -31,11 +31,9 @@ class PFCFreeEnergyFunctional(FreeEnergyFunctional2D):
     @overrides(FreeEnergyFunctional2D)
     def derivative(self, field: RealField2D):
 
-        field.fft2()
-        #D2psi = irfft2(-field.K2*rfft2(field.psi))
-        #D4psi = irfft2(field.K4*rfft2(field.psi))
+        field.fft()
         linear_term = ((1-field.K2)**2 - self.eps) * field.psi_k
-        field.ifft2()
+        field.ifft()
 
         #local_mu = (1-self.eps) * field.psi + field.psi**3 + 2*D2psi + D4psi
         local_mu = irfft2(linear_term) + field.psi**3

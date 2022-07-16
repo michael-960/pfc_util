@@ -66,6 +66,7 @@ def generate_eps(na: int, nb: int, eps_str: str,
 
     sol0 = static.get_relaxed_minimized_coexistent_unit_cell(eps_str, liquid=False)
     liq0 = static.get_relaxed_minimized_coexistent_unit_cell(eps_str, liquid=True)
+
     mu = static.get_coexistent_mu_final(eps_str)
     eps = float(eps_str)
 
@@ -74,6 +75,9 @@ def generate_eps(na: int, nb: int, eps_str: str,
     Ly0 = sol0.Ly
     Nx0 = sol0.Nx
     Ny0 = sol0.Ny
+
+    print(sol0.Nx)
+    print(sol0.Ny)
 
     _density = np.sqrt(Nx0*Ny0/Lx0/Ly0)
 
@@ -117,6 +121,7 @@ def generate_eps(na: int, nb: int, eps_str: str,
         model_sol.evolve(minimizer='mu', dt=minimize[0], eps=eps, mu=mu, N_epochs=minimize[1], display_format=dfmt)
         model_liq = pfc.PFC(liq)
         model_liq.evolve(minimizer='mu', dt=minimize[0], eps=eps, mu=mu, N_epochs=minimize[1], display_format=dfmt)
+
     return theta, sol, liq
 
 
