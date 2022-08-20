@@ -1,7 +1,7 @@
 from enum import Enum
 from pprint import pprint
 import warnings
-from typing import Tuple, Optional, Union
+from typing import List, Tuple, Optional, Union
 
 import numpy as np
 from matplotlib import pyplot as plt
@@ -64,12 +64,93 @@ def generate_eps(na: int, nb: int, eps_str: str,
     Lx *= f[0]
     Ly *= f[1]
 
+    print(f'[olg] f={f}')
+
     sol0 = static.get_relaxed_minimized_coexistent_unit_cell(eps_str, liquid=False)
     liq0 = static.get_relaxed_minimized_coexistent_unit_cell(eps_str, liquid=True)
+
+    print(f'[olg] sol0 psibar = {sol0.psi.mean()}')
+    print(f'[olg] sol0 size = ({sol0.Lx}, {sol0.Ly})')
+    print(f'[olg] sol0 shape = ({sol0.Nx}, {sol0.Ny})')
 
     mu = static.get_coexistent_mu_final(eps_str)
     eps = float(eps_str)
 
+    Lx0 = sol0.Lx
+    Ly0 = sol0.Ly
+    Nx0 = sol0.Nx
+    Ny0 = sol0.Ny
+
+
+    _density = np.sqrt(Nx0*Ny0/Lx0/Ly0)
+
+    try:
+        if NxNy is AutoDimMode.SCALE:
+            Nx = np.rint(Lx0*_density)
+            Ny = np.rint(Ly0*_density)
+
+        elif NxNy is AutoDimMode.SNAP:
+            Nx = 2 ** int(np.rint(np.log2(Lx*_density)))
+            Ny = 2 ** int(np.rint(np.log2(Ly*_density)))
+        
+        else:
+            assert isinstance(NxNy, tuple)
+            assert len(NxNy) == 2
+            assert type(NxNy[0]) is type(NxNy[1]) is int
+            Nx = NxNy[0]
+            Ny = NxNy[1]
+    except AssertionError:
+        raise ValueError('NxNy must be a tuple of 2 integers (Nx, Ny) or an instance of AutoDimMode')
+
+
+    sol = fd.RealField2D(Lx, Ly, Nx, Ny)
+    liq = fd.RealField2D(Lx, Ly, Nx, Ny)
+
+    
+    Xr = np.cos(theta) * sol.X - np.sin(theta) * sol.Y
+    Yr = np.sin(theta) * sol.X + np.cos(theta) * sol.Y
+
+    Ir = (Xr / Lx0 * Nx0).astype(int) % Nx0
+    Jr = (Yr / Ly0 * Ny0).astype(int) % Ny0
+
+    
+    sol_psi = sol0.psi[Ir,Jr] 
+    liq_psi = liq0.psi[Ir,Jr] 
+    sol.set_psi(sol_psi)
+    liq.set_psi(liq_psi)
+
+    print(f'[olg] sol psibar = {sol.psi.mean()}')
+    print(f'[olg] sol size = ({Lx}, {Ly})')
+    print(f'[olg] sol shape = ({Nx}, {Ny})')
+
+
+
+    dfmt = '[{system}][{label}][t={age:.2f}] f={f:.10f} F={F:.10f} omega={omega:.10f} Omega={Omega:.10f} psibar={psibar:.10f}'
+    if minimize is not None:
+        print(f'[olg] running mu-minimzation')
+        model_sol = pfc.PFC(sol)
+        model_sol.evolve(minimizer='mu', dt=minimize[0], eps=eps, mu=mu, N_epochs=minimize[1], display_format=dfmt)
+        model_liq = pfc.PFC(liq)
+        model_liq.evolve(minimizer='mu', dt=minimize[0], eps=eps, mu=mu, N_epochs=minimize[1], display_format=dfmt)
+
+    print(f'[olg] sol psibar = {sol.psi.mean()}')
+    print(f'[olg] sol size = ({Lx}, {Ly})')
+    print(f'[olg] sol shape = ({Nx}, {Ny})')
+
+
+    return theta, sol, liq
+
+def generate_from_field(
+        na: int, nb: int, 
+        sol0: RealField2D, liq0: RealField2D,
+        f: List[float]=[1., 1.], 
+        NxNy: Union[Tuple[int, int], AutoDimMode]=AutoDimMode.SCALE,
+        minimize: Optional[Tuple[float, int]]=None) -> Tuple[float, RealField2D, RealField2D]:
+
+    theta, Lx, Ly = generate_minimal(na, nb)
+
+    Lx *= f[0]
+    Ly *= f[1]
 
     Lx0 = sol0.Lx
     Ly0 = sol0.Ly
@@ -117,12 +198,10 @@ def generate_eps(na: int, nb: int, eps_str: str,
 
     dfmt = '[{system}][{label}][t={age:.2f}] f={f:.10f} F={F:.10f} omega={omega:.10f} Omega={Omega:.10f} psibar={psibar:.10f}'
     if minimize is not None:
-        model_sol = pfc.PFC(sol)
-        model_sol.evolve(minimizer='mu', dt=minimize[0], eps=eps, mu=mu, N_epochs=minimize[1], display_format=dfmt)
-        model_liq = pfc.PFC(liq)
-        model_liq.evolve(minimizer='mu', dt=minimize[0], eps=eps, mu=mu, N_epochs=minimize[1], display_format=dfmt)
+        raise NotImplementedError
 
     return theta, sol, liq
+
 
 
 # generate a minimized solid profile for mu=0.195 eps=0.1

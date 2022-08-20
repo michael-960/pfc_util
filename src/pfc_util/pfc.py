@@ -1,6 +1,7 @@
 from __future__ import annotations
 import warnings
 from typing import Optional, Union, Callable, List
+from tqdm import tqdm
 
 import numpy as np
 import matplotlib
@@ -127,7 +128,6 @@ class PFC:
                     raise ValueError(f'expansion rate must be specified with constant mu stress relaxer')
 
                 self.new_stress_relaxer(dt, eps, mu, expansion_rate=expansion_rate)
-
 
         if N_epochs is None:
             self.evolve_nonstop(N_steps, custom_keyboard_interrupt_handler=custom_keyboard_interrupt_handler,
@@ -264,12 +264,14 @@ def load_pfc_group(path: str) -> PFCGroup:
     saved = np.load(path, allow_pickle=True)
     g = PFCGroup()
 
-    for name in saved.files:
-        data = scalarize(saved[name])
-        model_state = data['model']
-        model = import_pfc_model(model_state)
-        attrs = data['attrs']
-
-        g.put(model, name, attrs=attrs)
+    for name in tqdm(saved.files):
+        try:
+            data = scalarize(saved[name])
+            model_state = data['model']
+            model = import_pfc_model(model_state)
+            attrs = data['attrs']
+            g.put(model, name, attrs=attrs)
+        except Exception:
+            print(f'error occured while loading {name}')
     return g
 

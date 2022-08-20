@@ -14,6 +14,8 @@ except ImportError:
 
 
 _uc_path_map = {
+
+    '0.01': 'uc_eps0.01.field',
     #'0.02': 'uc_eps0.02.field',
     '0.04': 'uc_eps0.04.field',
     '0.06': 'uc_eps0.06.field',
@@ -32,6 +34,7 @@ _uc_path_map = {
 }
 
 _liq_path_map = {
+    '0.01': 'uc_eps0.01_liq.field',
     #'0.02': 'uc_eps0.02_liq.field',
     '0.04': 'uc_eps0.04_liq.field',
     '0.06': 'uc_eps0.06_liq.field',
@@ -74,6 +77,7 @@ def get_relaxed_minimized_coexistent_unit_cell(eps: str, liquid=False) -> RealFi
 
 
 _coex_epsmu_bounds = {
+    '0.01': (0.063450057, 0.063450058),
     #'0.02': (0.080583046, 0.080583048),
     '0.04': (0.125627867, 0.125627868),
     '0.06': (0.152877453, 0.152877454),
@@ -92,6 +96,7 @@ _coex_epsmu_bounds = {
 }
 
 _coex_epsmu_final = {
+    '0.01': 0.0634500576928258,
     #'0.02': 0.08058304741978646,
     '0.04': 0.12562786787748337,
     '0.06': 0.152877453515625,

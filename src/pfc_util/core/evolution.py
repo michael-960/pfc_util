@@ -51,7 +51,7 @@ class PFCMinimizer(FancyEvolver):
 
 
 class ConstantChemicalPotentialMinimizer(PFCMinimizer):
-    def __init__(self, field: RealField2D, dt: float, eps: float, mu: float, noise_generator:NoiseGenerator2D=None):
+    def __init__(self, field: RealField2D, dt: float, eps: float, mu: float, noise_generator:Optional[NoiseGenerator2D]=None):
         super().__init__(field, dt, eps)
         self.info['minimizer'] = 'mu'
         self.info['mu'] = self.mu = mu
@@ -63,8 +63,7 @@ class ConstantChemicalPotentialMinimizer(PFCMinimizer):
         self.is_noisy = not (noise_generator is None)
 
         if not field.fft_initialized():
-            field.initialize_fft()
-
+            field.initialize_fft() 
         self._kernel = 1-2*self.field.K2+self.field.K4 - self.eps
         self._exp_dt_kernel = np.exp(-dt*self._kernel)
         self._mu_dt_half = self.dt * self.mu / 2
@@ -355,10 +354,11 @@ class StressRelaxer(PFCMinimizer):
 
     def _prepare_minimization(self):
         f = self.field
-        self._exp_dt_eps_half = np.exp(self.dt*self.eps/2)
+        #self._exp_dt_eps_half = np.exp(self.dt*self.eps/2)
         self._mu_dt_half = self.dt * self.mu / 2
-        self._conv_helper = self.field.K2 * 0 + 2/self.NN
+        #self._conv_helper = self.field.K2 * 0 + 2/self.NN
         self._2_NN = 2 / self.NN
+
         self._domega_kernels = np.array([
             2/f.Lx*f.Kx2*(1-f.K2), 
             2/f.Ly*f.Ky2*(1-f.K2), 
@@ -369,16 +369,8 @@ class StressRelaxer(PFCMinimizer):
 
         self.Lx0 = f.Lx
         self.Ly0 = f.Ly
-        self.fx = 1.
-        self.fy = 1.
 
-        self.Lx = f.Lx
-        self.Ly = f.Ly
-
-        self.K2 = f.K2
-        self.K4 = f.K4
-        self.Kx2 = f.Kx2
-        self.Ky2 = f.Ky2
+        self.set_size_scale(1., 1.)
 
     @overrides(PFCMinimizer)
     def step(self):

@@ -42,3 +42,5 @@ class GaussianPFCMinimizer(ConstantChemicalPotentialMinimizer):
         self._mu_dt_half = self.dt * self.mu / 2
 
 
+
+

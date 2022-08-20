@@ -30,7 +30,6 @@ class PFCFreeEnergyFunctional(FreeEnergyFunctional2D):
 
     @overrides(FreeEnergyFunctional2D)
     def derivative(self, field: RealField2D):
-
         field.fft()
         linear_term = ((1-field.K2)**2 - self.eps) * field.psi_k
         field.ifft()
