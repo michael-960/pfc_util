@@ -16,6 +16,7 @@ src/pfc_util/core/base.py
 src/pfc_util/core/evolution.py
 src/pfc_util/extra/__init__.py
 src/pfc_util/extra/gaussian.py
+src/pfc_util/extra/pfc6.py
 src/pfc_util/legacy/__init__.py
 src/pfc_util/legacy/pfc.py
 src/pfc_util/legacy/pfc_im.py
@@ -29,6 +30,8 @@ src/pfc_util/toolkit/profile_editor.py
 src/pfc_util/toolkit/routine.py
 src/pfc_util/toolkit/static.py
 src/pfc_util/toolkit/_res/__init__.py
+src/pfc_util/toolkit/_res/uc_eps0.01.field
+src/pfc_util/toolkit/_res/uc_eps0.01_liq.field
 src/pfc_util/toolkit/_res/uc_eps0.02.field
 src/pfc_util/toolkit/_res/uc_eps0.02_liq.field
 src/pfc_util/toolkit/_res/uc_eps0.04.field
