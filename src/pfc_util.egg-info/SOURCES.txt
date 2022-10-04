@@ -17,12 +17,13 @@ src/pfc_util/core/evolution.py
 src/pfc_util/extra/__init__.py
 src/pfc_util/extra/gaussian.py
 src/pfc_util/extra/pfc6.py
+src/pfc_util/fileproxies/__init__.py
 src/pfc_util/legacy/__init__.py
 src/pfc_util/legacy/pfc.py
 src/pfc_util/legacy/pfc_im.py
-src/pfc_util/profile_prompt/__init__.py
-src/pfc_util/profile_prompt/editor_prompt.py
-src/pfc_util/profile_prompt/prompt.py
+src/pfc_util/legacy/profile_prompt/__init__.py
+src/pfc_util/legacy/profile_prompt/editor_prompt.py
+src/pfc_util/legacy/profile_prompt/prompt.py
 src/pfc_util/toolkit/__init__.py
 src/pfc_util/toolkit/edit.py
 src/pfc_util/toolkit/ortho_lattice_generator.py
