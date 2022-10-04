@@ -157,8 +157,9 @@ def generate_from_field(
     Nx0 = sol0.Nx
     Ny0 = sol0.Ny
 
-    print(sol0.Nx)
-    print(sol0.Ny)
+    print('lattice generator')
+    print(f'solid resolution: ({sol0.Nx}, {sol0.Ny})')
+    print(f'solid size: {sol0.Lx}, {sol0.Ly})')
 
     _density = np.sqrt(Nx0*Ny0/Lx0/Ly0)
 

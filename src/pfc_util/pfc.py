@@ -10,12 +10,17 @@ import shutil
 
 from michael960lib.common import IllegalActionError, scalarize
 from torusgrid import fields as fd
+
+from rich.progress import track
+
 import torusgrid as tg
+
 from .core.evolution import ConstantChemicalPotentialMinimizer, NonlocalConservedMinimizer, StressRelaxer, PFCMinimizer
 from .core.base import PFCStateFunction
 from .history import PFCHistory, PFCMinimizerHistoryBlock, PFCEditActionHistoryBlock, import_history
 
-matplotlib.use('TKAgg')
+
+# matplotlib.use('TKAgg')
 matplotlib.style.use('fast')
 
 
@@ -260,11 +265,17 @@ class PFCGroup:
         return sorted(models, key=get_item, reverse=reverse)
 
 
-def load_pfc_group(path: str) -> PFCGroup:
+def load_pfc_group(path: str, show_progress: bool = True) -> PFCGroup:
     saved = np.load(path, allow_pickle=True)
     g = PFCGroup()
-
-    for name in tqdm(saved.files):
+   
+    
+    if show_progress:
+        files = track(saved.files, description='Loading PFC models')
+    else:
+        saved.files
+    
+    for name in files:
         try:
             data = scalarize(saved[name])
             model_state = data['model']
@@ -274,4 +285,6 @@ def load_pfc_group(path: str) -> PFCGroup:
         except Exception:
             print(f'error occured while loading {name}')
     return g
+
+
 
