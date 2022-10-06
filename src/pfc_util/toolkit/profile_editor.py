@@ -1,7 +1,9 @@
+'''
+Deprecated
+'''
 import numpy as np
-from matplotlib import pyplot as plt
-from scipy.fft import fft2, ifft2, fft, ifft
-from pprint import pprint
+
+
 
 
 def modify_and_save(new_file_name, saved, **modified):

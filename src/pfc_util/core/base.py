@@ -1,35 +1,33 @@
 import numpy as np
-from matplotlib import pyplot as plt
-from scipy.fft import rfft2, irfft2
-import pyfftw
 
-from pprint import pprint
-import tqdm
-import time
-import threading
-import sys
-from typing import List, Optional
+from ..utils.fft import rfft2, irfft2 
 
-from michael960lib.math import fourier
-from michael960lib.common import overrides, ModifyingReadOnlyObjectError, IllegalActionError
-from torusgrid.fields import RealField2D, import_field, FieldStateFunction
-from torusgrid.dynamics import FreeEnergyFunctional2D, NoiseGenerator2D
+from typing import Dict, Optional, final
+from typing_extensions import Self
+
+from torusgrid.fields import RealField2D
+
+from torusgrid.fields import FreeEnergyFunctional as _FreeEnergyFunctional
+import numpy.typing as npt
 
 
-class PFCFreeEnergyFunctional(FreeEnergyFunctional2D):
-    def __init__(self, eps):
+
+class FreeEnergyFunctional(_FreeEnergyFunctional[RealField2D]):
+    '''
+    PFC free energy fuctional
+    '''
+    def __init__(self, eps: float):
         self.eps = eps
 
-    @overrides(FreeEnergyFunctional2D)
-    def free_energy_density(self, field: RealField2D):
+    def free_energy_density(self, field: RealField2D) -> npt.NDArray[np.float_]:
         kernel = 1-2*field.K2+field.K4
         psi_k = rfft2(field.psi)
         psi_k_o = kernel * psi_k
+        
         f = 1/2 * field.psi * irfft2(psi_k_o) + field.psi**4/4 - self.eps/2 * field.psi**2
         return np.real(f)
 
-    @overrides(FreeEnergyFunctional2D)
-    def derivative(self, field: RealField2D):
+    def derivative(self, field: RealField2D) -> npt.NDArray[np.float_]:
         field.fft()
         linear_term = ((1-field.K2)**2 - self.eps) * field.psi_k
         field.ifft()
@@ -38,32 +36,77 @@ class PFCFreeEnergyFunctional(FreeEnergyFunctional2D):
         local_mu = irfft2(linear_term) + field.psi**3
         return local_mu
 
-    def grand_potential_density(self, field: RealField2D, mu: float):
+    def grand_potential_density(self, field: RealField2D, mu: float) -> npt.NDArray[np.float_]:
         return self.free_energy_density(field) - mu*field.psi
 
-    def mean_grand_potential_density(self, field: RealField2D, mu: float):
+    def mean_grand_potential_density(self, field: RealField2D, mu: float) -> float:
         return np.mean(self.grand_potential_density(field, mu))
 
-    def grand_potential(self, field: RealField2D, mu: float):
+    def grand_potential(self, field: RealField2D, mu: float) -> float:
         return np.sum(self.grand_potential_density(field, mu)) * field.dV
 
-class PFCStateFunction(FieldStateFunction):
-    def __init__(self, Lx, Ly, f, F, psibar, omega=None, Omega=None):
-        super().__init__()
-        self.Lx = self._content['Lx'] = Lx
-        self.Ly = self._content['Ly'] = Ly
-        self.f = self._content['f'] = f
-        self.F = self._content['F'] = F
-        self.psibar = self._content['psibar'] = psibar
-        self.omega = self._content['omega'] = omega
-        self.Omega = self._content['Omega'] = Omega
 
-    def is_grand_canonical(self) -> bool:
-        return not (self.omega is None)
+class StateFunction:
+    '''
+    An object representing a state function of a PFC field
+    '''
+    def __init__(self, 
+            Lx: float, Ly: float, f: float, F: float, psibar: float,
+            omega: Optional[float]=None, Omega: Optional[float]=None):
+        self._content: Dict[str, float|None] = {}
 
-    def to_string(self, state_string_format: Optional[str]=None,
+        self._content['Lx'] = Lx
+        self._content['Ly'] = Ly
+        self._content['f'] = f
+        self._content['F'] = F
+        self._content['psibar'] = psibar
+        self._content['omega'] = omega
+        self._content['Omega'] = Omega
+
+    @property
+    def Lx(self): 'system width'; return self._content['Lx']
+    @property
+    def Ly(self): 'system height'; return self._content['Ly']
+    @property
+    def f(self): 'mean free energy density'; return self._content['f']
+    @property
+    def F(self): 'free energy'; return self._content['F']
+    @property
+    def psibar(self): 'mean density'; return self._content['psibar']
+    @property
+    def omega(self): 'mean grand potential density'; return self._content['omega']
+    @property
+    def Omega(self): 'grand potential'; return self._content['Omega']
+
+    @classmethod
+    def from_field(cls, 
+            field: RealField2D, eps: float, 
+            mu: Optional[float]=None) -> Self:
+        '''
+        Alternative constructor for fields.
+        '''
+        fef = FreeEnergyFunctional(eps)
+        f = fef.mean_free_energy_density(field)
+        F = fef.free_energy(field)
+        psibar = field.psi.mean()
+        
+        omega = None
+        Omega = None
+        
+        if mu is not None:
+            omega = fef.mean_grand_potential_density(field, mu)
+            Omega = fef.grand_potential(field, mu)
+
+        return cls(field.Lx, field.Ly, f, F, psibar, omega, Omega)
+
+    @property
+    def is_grand_canonical(self) -> bool: return not (self.omega is None)
+
+    
+    def to_string(self, 
+            state_string_format: Optional[str]=None,
             float_fmt: str='.3f', pad: int=1, delim: str='|') -> str:
-        if not state_string_format is None:
+        if state_string_format is not None:
             return state_string_format.format(
                 Lx=self.Lx, Ly=self.Ly, f=self.f, F=self.F, 
                 omega=self.omega, Omega=self.Omega, psibar=self.psibar
@@ -74,14 +117,27 @@ class PFCStateFunction(FieldStateFunction):
         state_func_list = []
 
         for item_name in items:
-            item = self.item_dict[item_name]
+            item = self._content[item_name] # ! modified
             if not item is None: 
                 state_func_list.append(f'{item_name}={item:{float_fmt}}')
         return delim_padded.join(state_func_list)
 
+    def __repr__(self) -> str:
+        if self.is_grand_canonical:
 
-def import_state_function(state: dict) -> PFCStateFunction:
-    sf = PFCStateFunction(state['Lx'], state['Ly'], state['f'], state['F'], state['psibar'], state['omega'], state['Omega'])
+            return self.to_string(
+                    'PFCStateFunction(Lx={Lx:.5f}, Ly={Ly:.5f}, f={f:.5f}, F={F:.5f}, ' +
+                        'omega={omega:.5f}, Omega={Omega:.5f}'
+            )
+        else:
+            return self.to_string(
+                'PFCStateFunction(Lx={Lx:.5f}, Ly={Ly:.5f}, f={f:.5f}, F={F:.5f})'
+            )
+        
+
+
+def import_state_function(state: dict) -> StateFunction:
+    sf = StateFunction(state['Lx'], state['Ly'], state['f'], state['F'], state['psibar'], state['omega'], state['Omega'])
     return sf
 
 def get_latex(item_name) -> str:
@@ -90,8 +146,8 @@ def get_latex(item_name) -> str:
     return _item_latex_dict[item_name]
 
 _item_latex_dict = {
-    'Lx': r'$Lx$',
-    'Ly': r'$Ly$',
+    'Lx': r'$L_x$',
+    'Ly': r'$L_y$',
     'f': r'$f$',
     'F': r'$F$',
     'omega': r'$\omega$',

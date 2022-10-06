@@ -1,6 +1,8 @@
-from typing import Optional
+from __future__ import annotations
+from typing import Callable, Optional
 
 import numpy as np
+import numpy.typing as npt
 from scipy.fft import rfft2, irfft2
 
 from michael960lib.common import overrides, deprecated, experimental
@@ -8,6 +10,7 @@ from torusgrid.fields import RealField2D
 from torusgrid.dynamics import FreeEnergyFunctional2D, NoiseGenerator2D
 from ..core.base import PFCFreeEnergyFunctional
 from ..core.evolution import ConstantChemicalPotentialMinimizer, StressRelaxer, PFCMinimizer, NonlocalConservedRK4
+
 
 
 class PFCFunctional6(PFCFreeEnergyFunctional):
@@ -24,7 +27,6 @@ class PFCFunctional6(PFCFreeEnergyFunctional):
         f = 1/2 * field.psi * irfft2(psi_k_o) + field.psi**4/4 - self.eps/2 * field.psi**2
         return np.real(f)
 
-
     @overrides(FreeEnergyFunctional2D)
     def derivative(self, field):
         field.fft()
@@ -33,8 +35,6 @@ class PFCFunctional6(PFCFreeEnergyFunctional):
 
         local_mu = irfft2(linear_term) + field.psi**3
         return local_mu
-
-
 
 class PFC6Minimizer(ConstantChemicalPotentialMinimizer):
     def __init__(self,
@@ -47,7 +47,6 @@ class PFC6Minimizer(ConstantChemicalPotentialMinimizer):
         self.info['system'] = 'pfc6'
         self.info['alpha'] = alpha
         self.info['label'] = self.label = f'mu6 eps={eps:.5f} mu={mu:.5f} alpha={alpha:.5f} dt={dt:.5f}'
-        
         self.fef = PFCFunctional6(eps, alpha)
 
         _kernel = 1 - 2*field.K2 + field.K4 +\
@@ -57,13 +56,25 @@ class PFC6Minimizer(ConstantChemicalPotentialMinimizer):
         self._mu_dt_half = dt * mu / 2
 
 
+class PFC6NonlocalConservedRK4(NonlocalConservedRK4):
+    def __init__(self, field: RealField2D, dt: float, eps: float, alpha: float,
+            noise_generator: Optional[NoiseGenerator2D]=None,
+            k_regularizer=0.1, inertia=100):
+        super().__init__(field, dt, eps, noise_generator, k_regularizer, inertia)
+        self.alpha = alpha
+        self.info['system'] = 'pfc6'
+        self.info['alpha'] = alpha
+        self.info['label'] = self.label = f'pfc6 nonlocal-rk4 eps={eps} alpha={alpha} dt={dt} R={k_regularizer} M={inertia}'
+        self.fef = PFCFunctional6(eps, alpha)
+
+
 
 class PFC6Relaxer(StressRelaxer):
     def __init__(self, field: RealField2D, dt: float, eps: float, alpha: float, mu: float, expansion_rate: float=1.):
         super().__init__(field, dt, eps, mu, expansion_rate=expansion_rate)
         self.info['system'] = 'pfc6'
         self.info['alpha'] = alpha
-        self.info['label'] = self.label = f'stress-relax6 eps={eps:.5f} mu={mu:.5f} dt={dt:.5f}'
+        self.info['label'] = self.label = f'stress-relax6 eps={eps:.5f} mu={mu:.5f} alpha={alpha:.5f} dt={dt:.5f}'
 
         self.alpha = alpha
         self.fef = PFCFunctional6(eps, alpha)
@@ -92,8 +103,8 @@ class PFC6Relaxer(StressRelaxer):
     def step(self):
         f = self.field
         self.age += self.dt
-        if self.is_noisy:
-            f.psi += self.dt * self.noise_generator.generate() 
+        # if self.noise_generator is not None:
+        #     f.psi += self.dt * self.noise_generator.generate() 
 
         f.psi += self._mu_dt_half
         f.psi /=np.sqrt(1+f.psi**2*self.dt)
@@ -169,15 +180,6 @@ class PFC6Relaxer(StressRelaxer):
         self.Ly = self.field.Ly * self.fy
 
 
-class PFC6NonlocalConservedRK4(NonlocalConservedRK4):
-    def __init__(self, field: RealField2D, dt: float, eps: float, alpha: float,
-            noise_generator: Optional[NoiseGenerator2D]=None,
-            k_regularizer=0.1, inertia=100):
-        super().__init__(field, dt, eps, noise_generator, k_regularizer, inertia)
-        self.alpha = alpha
-        self.info['alpha'] = alpha
-        self.info['label'] = self.label = f'pfc6 nonlocal-rk4 eps={eps} alpha={alpha} dt={dt} R={k_regularizer} M={inertia}'
-        self.fef = PFCFunctional6(eps, alpha)
 
 __all__ = ['PFCFunctional6', 'PFC6Minimizer']
 

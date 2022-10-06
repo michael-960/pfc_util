@@ -11,10 +11,9 @@ from ..core.evolution import PFCMinimizer
 from ..pfc import PFC
 
 
-def find_coexistent_mu(
-        solid_field: RealField2D, dt: float, eps: float, mu_min: float, mu_max: float, 
-        relax=True, max_iters: int=None, precision: float=0., **minimizer_kwargs
-        ) -> dict:
+
+def find_coexistent_mu(solid_field: RealField2D, dt: float, eps: float, mu_min: float, mu_max: float, 
+        relax=True, max_iters: int=None, precision: float=0., **minimizer_kwargs) -> dict:
 
     if mu_min >= mu_max:
         raise ValueError('mu_min must be smaller than mu_max')
@@ -201,4 +200,4 @@ def evolve_and_elongate_interface(
     return model, ifc_elongated
 
 
- 
+     

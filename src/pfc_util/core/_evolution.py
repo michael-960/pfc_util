@@ -1,29 +1,29 @@
-import time
-import threading
-import sys
-import warnings
-from pprint import pprint
 import tqdm
-from typing import List, Optional
+from typing import Optional
 
 import numpy as np
-from matplotlib import pyplot as plt
-from scipy.fft import fft2, ifft2, rfft2, irfft2, set_global_backend
-import pyfftw
 
-from michael960lib.math import fourier
-from michael960lib.common import overrides, experimental, deprecated
+from michael960lib.common import overrides, experimental
 from michael960lib.common import ModifyingReadOnlyObjectError, IllegalActionError
-from torusgrid.fields import RealField2D, import_field
-from torusgrid.dynamics import FancyEvolver, NoiseGenerator2D, FreeEnergyFunctional2D, EvolverHistory
-from .base import PFCStateFunction, PFCFreeEnergyFunctional, import_state_function
+
+from torusgrid.dynamics._base import FancyEvolver, NoiseGenerator2D, EvolverHistory
+from torusgrid.fields import RealField2D
+
+from .base import StateFunction, FreeEnergyFunctional, import_state_function
 
 
+
+# deprecated module
+
+PFCStateFunction = StateFunction
+PFCFreeEnergyFunctional = FreeEnergyFunctional
 
 
 class PFCMinimizer(FancyEvolver):
-    def __init__(self, field: RealField2D, dt, eps):
+    def __init__(self, field: RealField2D, dt: float, eps: float):
         super().__init__(field)
+        self.field: RealField2D
+
         self.dt = dt
         self.eps = eps
         self.age = 0
@@ -37,6 +37,7 @@ class PFCMinimizer(FancyEvolver):
         self.info['label'] = self.label = f'NULL eps={eps} dt={dt}'
 
         self.display_format = '[{label}] f={f:.5f} F={F:.5f} psibar={psibar:.5f}'
+
     
     @overrides(FancyEvolver)
     def get_evolver_state(self):
@@ -51,7 +52,11 @@ class PFCMinimizer(FancyEvolver):
 
 
 class ConstantChemicalPotentialMinimizer(PFCMinimizer):
-    def __init__(self, field: RealField2D, dt: float, eps: float, mu: float, noise_generator:Optional[NoiseGenerator2D]=None):
+    def __init__(self, 
+            field: RealField2D, 
+            dt: float, eps: float, mu: float, 
+            noise_generator:Optional[NoiseGenerator2D]=None):
+
         super().__init__(field, dt, eps)
         self.info['minimizer'] = 'mu'
         self.info['mu'] = self.mu = mu
@@ -60,7 +65,6 @@ class ConstantChemicalPotentialMinimizer(PFCMinimizer):
         self.fef = PFCFreeEnergyFunctional(eps)
         self.noise_generator = noise_generator
 
-        self.is_noisy = not (noise_generator is None)
 
         if not field.fft_initialized():
             field.initialize_fft() 
@@ -71,7 +75,8 @@ class ConstantChemicalPotentialMinimizer(PFCMinimizer):
     @overrides(PFCMinimizer)
     def step(self):
         self.age += self.dt
-        if self.is_noisy:
+
+        if self.noise_generator is not None:
             self.field.psi += self.dt * self.noise_generator.generate() 
 
         self.field.psi[:] += self._mu_dt_half
@@ -97,7 +102,9 @@ class ConstantChemicalPotentialMinimizer(PFCMinimizer):
 
 
 class NonlocalConservedMinimizer(PFCMinimizer):
-    def __init__(self, field: RealField2D, dt: float, eps: float, noise_generator:NoiseGenerator2D=None):
+    def __init__(self,
+            field: RealField2D, dt: float, eps: float, 
+            noise_generator: Optional[NoiseGenerator2D] = None):
         super().__init__(field, dt, eps)
 
         self.info['label'] = self.label = f'nonlocal eps={eps:.5f} dt={dt:.5f}'
@@ -107,7 +114,6 @@ class NonlocalConservedMinimizer(PFCMinimizer):
         self._exp_dt_kernel = np.exp(-dt*self._kernel)
         self.noise_generator = noise_generator
         self.fef = PFCFreeEnergyFunctional(eps)
-        self.is_noisy = not (noise_generator is None)
 
         if not field.fft_initialized():
             field.initialize_fft()
@@ -118,7 +124,7 @@ class NonlocalConservedMinimizer(PFCMinimizer):
     def step(self):
         self.age += self.dt
 
-        if self.is_noisy:
+        if self.noise_generator is not None:
             self.field.psi += self.dt * self.noise_generator.generate() 
         
         self.field.psi /= np.sqrt(1+self.field.psi**2*self.dt)
@@ -127,6 +133,7 @@ class NonlocalConservedMinimizer(PFCMinimizer):
         self.field.fft()
         self.field.psi_k *= self._exp_dt_kernel
         self.field.ifft()
+
         self.field.psi += - np.mean(self.field.psi) + self.psibar
 
         self.field.psi /= np.sqrt(1+self.field.psi**2*self.dt)
@@ -327,8 +334,10 @@ class ConservedMinimizer(PFCMinimizer):
 
 
 class StressRelaxer(PFCMinimizer):
-    def __init__(self, field: RealField2D, dt: float, eps: float, mu: float,
-            noise_generator: NoiseGenerator2D=None, expansion_rate: float=1):
+    def __init__(self, field: RealField2D, 
+            dt: float, eps: float, mu: float,
+            noise_generator: Optional[NoiseGenerator2D] = None,
+            expansion_rate: float=1):
         super().__init__(field, dt, eps)
         self.f = 1
 
@@ -405,8 +414,8 @@ class StressRelaxer(PFCMinimizer):
         dT = self.dt
 
         self._domega_kernels[:,:,:] = [
-                2/self.Lx*self.Kx2*(1-f.K2), 
-                2/self.Ly*self.Ky2*(1-f.K2), 
+                2/self.Lx*self.Kx2*(1-self.K2), 
+                2/self.Ly*self.Ky2*(1-self.K2), 
                 -2/self.Lx**2*self.Kx2*(3-5*self.Kx2-3*self.Ky2),
                 -2/self.Ly**2*self.Ky2*(3-5*self.Ky2-3*self.Kx2),
                 2/self.Lx/self.Ly * 2*self.Kx2*self.Ky2]
@@ -416,6 +425,8 @@ class StressRelaxer(PFCMinimizer):
         dLx = -omega_list[0]*dT + (omega_list[0] * omega_list[2] + omega_list[1] * omega_list[4]) * dT**2/2
         dLy = -omega_list[1]*dT + (omega_list[1] * omega_list[3] + omega_list[0] * omega_list[4]) * dT**2/2
 
+        # Lx = Lx0 * fx
+        # dLx = Lx0 * dfx
         dfx = dLx / self.Lx0
         dfy = dLy / self.Ly0
 
@@ -507,7 +518,6 @@ class RandomStepMinimizer(PFCMinimizer):
             Omega = self.fef.grand_potential(self.field, self.mu)
 
         return PFCStateFunction(Lx, Ly, f, F, psibar, omega, Omega)
-
 
 
 

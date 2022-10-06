@@ -1,8 +1,8 @@
-from numbers import Number
 from typing import Tuple
 
 import numpy as np
-from torusgrid.fields import import_field, RealField2D
+from torusgrid.fields import RealField2D
+import torusgrid as tg
 
 from . import _res
 
@@ -61,7 +61,7 @@ def get_relaxed_minimized_coexistent_unit_cell(eps: str, liquid=False) -> RealFi
             raise ValueError(f'no static resource for eps=\'{eps}\' liquid currently')
 
         with pkg_resources.path(_res, _liq_path_map[eps]) as pth:
-            field = import_field(np.load(pth, allow_pickle=True))
+            field = tg.proxies.RealField2DNPZ.read(str(pth))
         return field
 
     else:
@@ -69,11 +69,9 @@ def get_relaxed_minimized_coexistent_unit_cell(eps: str, liquid=False) -> RealFi
             raise ValueError(f'no static resource for eps=\'{eps}\' solid currently')
 
         with pkg_resources.path(_res, _uc_path_map[eps]) as pth:
-            field = import_field(np.load(pth, allow_pickle=True))
+            field = tg.proxies.RealField2DNPZ.read(str(pth))
         return field
 
-
-    raise ValueError(f'no static resource for eps=\'{eps}\' currently')
 
 
 _coex_epsmu_bounds = {
@@ -125,12 +123,12 @@ _coex_epsucf = {
 
 def get_coexistent_mu_bounds(eps: str) -> Tuple[float, float]:
     if not eps in _coex_epsmu_bounds.keys():
-        return ValueError(f'no coexistent mu for eps=\'{eps}\' currently')
+        raise ValueError(f'no coexistent mu for eps=\'{eps}\' currently')
     return _coex_epsmu_bounds[eps]
 
 def get_coexistent_mu_final(eps: str) -> float:
     if not eps in _coex_epsmu_final.keys():
-        return ValueError(f'no coexistent mu for eps=\'{eps}\' currently')
+        raise ValueError(f'no coexistent mu for eps=\'{eps}\' currently')
     return _coex_epsmu_final[eps]
 
 def get_relaxed_unit_cell_size(eps: str, ratio=True) -> Tuple[float, float]:
