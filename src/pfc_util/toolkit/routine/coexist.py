@@ -1,86 +1,137 @@
+from __future__ import annotations
+
+from typing import Optional, Callable, List, TypeVar, TypedDict
 import torusgrid as tg
+import numpy as np
+from torusgrid.dynamics import Evolver, EvolverHooks
+
+import rich
+
+class MuSearchRecord(TypedDict):
+    mu: List[float]
+    omega_s: List[float]
+    omega_l: List[float]
+
+    mu_min_initial: float
+    mu_max_initial: float
+    
+    mu_min_final: float
+    mu_max_final: float
 
 
-def find_coexistent_mu_general(
+def is_liquid(psi: np.ndarray, tol=1e-5):
+    return np.max(psi) - np.min(psi) <= tol
+
+
+def find_coexistent_mu(
     solid_field: tg.RealField2D,
     mu_min: float, mu_max: float,
-    fef: tg.FreeEnergyFunctional,
+    fef: tg.FreeEnergyFunctional, *,
+    
+    relaxer_supplier: Callable[[tg.RealField2D,float], Evolver[tg.RealField2D]],
+    relaxer_nsteps: int = 31,
+    relaxer_hooks: Optional[EvolverHooks]=None,
 
-    minimizer_supplier: Callable[[RealField2D, float], PFCMinimizer], 
-    relaxer_supplier: Optional[Callable[[RealField2D, float], PFCMinimizer]]=None,
-    max_iters: Optional[int]=None, precision: float=0.,
-    relax_callbacks: List[EvolverCallBack]=[],
-    minim_callbacks: List[EvolverCallBack]=[],
-    **minimizer_kwargs):
+    const_mu_supplier: Callable[[tg.RealField2D, float], Evolver[tg.RealField2D]],
+    const_mu_nsteps: int = 31,
+    const_mu_hooks: Optional[EvolverHooks]=None,
+    
+    max_iters: Optional[int]=None,
+    precision: float=0.,
+
+    verbose: bool = True
+    ):
     '''
-    Find mu such that omega_l == omega_s by running the following:
-        (0) Liquefy solid to get liquid profile
-        (1) Let mu = (mu_min + mu_max)
-        (2) Relax & minimize solid with const. mu
-        (3) Minimize liquid with const. mu
-        (4) Compare omeag_l & omega_s.
-            - If omega_l > omega_s then mu_min = mu
-            - If omega_l < omega_s then mu_max = mu
-        (5) Repeat (1)~(4) until mu_max - mu_min is smaller than the desired
-            precision, or until maximum iteration number is reached
+    Given: 
+        - a solid profile 
+        - minimum and maximum values of chemical potential
+        - a free energy functional,
+
+    find the chemical potential that satisfies:
+
+            Omega[solid] = Omega[liquid]
+    <=>  F[solid] - mu * N_s = F[liquid] - mu * N_l
+
+    via binary search. 
     '''
     if mu_min >= mu_max:
         raise ValueError('mu_min must be smaller than mu_max')
-    
     if max_iters is None and precision == 0.:
         raise ValueError('binary search will not stop with max_iters=None and precision=0') 
+
+    if max_iters is None: max_iters = 2**32
 
     sol = solid_field
     liq = tg.liquefy(solid_field)
 
-    
-    rec = {'mu': [], 'omega_s': [], 'omega_l': [], 'mu_min_initial': mu_min, 'mu_max_initial': mu_max}
-    
-    print('===========================================================================')
+    rec: MuSearchRecord = {
+            'mu': [], 
+            'omega_s': [], 
+            'omega_l': [], 
+            'mu_min_initial': mu_min, 
+            'mu_max_initial': mu_max,
+            'mu_min_final': -1,
+            'mu_max_final': -1,
+        }
 
-    for i in range(max_iters):
+   
+    console = rich.get_console()
+
+    for _ in range(max_iters): # type: ignore
         if mu_max - mu_min <= precision:
             break
         mu = (mu_min + mu_max) / 2
-        print(f'current bounds: {mu_min} ~ {mu_max}')
+        if verbose:
+            console.rule()
+            console.log(f'current bounds: {mu_min} ~ {mu_max}')
 
-        if relaxer_supplier:
-            # relax solid and resize liquid accordingly
-            relaxer = relaxer_supplier(sol, mu)
-            relaxer.run_nonstop(31, callbacks=relax_callbacks, **minimizer_kwargs)
-            liq.set_size(sol.Lx, sol.Ly)
+        '''relax solid and resize liquid accordingly'''
+        relaxer = relaxer_supplier(sol, mu)
+        relaxer.run(relaxer_nsteps, hooks=relaxer_hooks)
+        liq.set_size(sol.Lx, sol.Ly)
+        
+        '''evolve solid under constant mu'''
+        # minim = const_mu_supplier(sol, mu)
+        # minim.run(const_mu_nsteps, hooks=const_mu_hooks)
 
-        # evolve solid under constant mu
-        minim = minimizer_supplier(sol, mu)
-        minim.run_nonstop(31, callbacks=minim_callbacks, **minimizer_kwargs)
+        '''calculate solid mean grand potential'''
+        omega_s = fef.mean_free_energy_density(sol) - mu*sol.psi.mean()
 
-        # calculate solid mean grand potential
-        omega_s = fef.mean_grand_potential_density(sol, mu)
 
         if is_liquid(sol.psi, tol=1e-4):
-            print(f'solid field was liquefied during minimization with mu={mu}')
+            if verbose:
+                console.log(f'solid field was liquefied during minimization with mu={mu}')
             break
 
-        # evolve liquid under constant mu
-        minim = minimizer_supplier(liq, mu)
-        minim.run_nonstop(31, callbacks=minim_callbacks, **minimizer_kwargs)
-        # calculate liquid mean grand potential
-        omega_l = fef.mean_grand_potential_density(liq, mu)
+        '''evolve liquid under constant mu'''
+        minim = const_mu_supplier(liq, mu)
+        minim.run(const_mu_nsteps, hooks=const_mu_hooks)
+
+        '''calculate liquid mean grand potential'''
+        omega_l = fef.mean_free_energy_density(liq) - mu*liq.psi.mean()
 
         rec['mu'].append(mu)
         rec['omega_s'].append(omega_s)
         rec['omega_l'].append(omega_l)
 
+        if verbose:
+            console.log(f'omega_l={omega_l}')
+            console.log(f'omega_s={omega_s}')
+
         if omega_s < omega_l:
             mu_min = mu
 
-        if omega_s > omega_l:
+        elif omega_s > omega_l:
             mu_max = mu
 
+        else:
+            console.log('Solid and liquid grand potentials are numerically indistinguishable under current floating point precision.')
+            console.log('Aborted.')
+            break
 
-        print('------------------------------------------------------------------------')
 
     rec['mu_min_final'] = mu_min
     rec['mu_max_final'] = mu_max
+
     return rec
 

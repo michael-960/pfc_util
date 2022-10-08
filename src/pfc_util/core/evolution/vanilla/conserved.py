@@ -31,7 +31,7 @@ class NonlocalConservedMinimizer(MinimizerMixin):
         self.initialize_fft()
     
     def step(self):
-        self.age += self.dt
+        self.set_age(self.age + self.dt)
         
         self.field.psi /= np.sqrt(1+self.field.psi**2*self.dt)
         self.field.psi += - np.mean(self.field.psi) + self.psibar
@@ -144,7 +144,7 @@ class NonlocalDescent(MinimizerMixin):
         return F
 
     def step(self):
-        self.age += self.dt
+        self.set_age(self.age + self.dt)
         self.field_tmp.psi[:,:] = self.field.psi[:,:]
         F = self.psi_dot()
         cutoff = 0.01 * self.dt

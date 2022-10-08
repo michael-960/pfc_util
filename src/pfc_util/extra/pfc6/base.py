@@ -1,3 +1,7 @@
+from __future__ import annotations
+from typing import Optional
+from typing_extensions import Self
+
 from torusgrid import RealField2D
 from ...utils.fft import rfft2, irfft2
 import numpy as np
@@ -33,3 +37,25 @@ class MinimizerMixin(core.MinimizerMixin):
         self.info['system'] = 'pfc6'
         self.info['alpha'] = alpha
         self.fef = FreeEnergyFunctional(self.eps, alpha)
+
+
+class StateFunction(core.StateFunction):
+    @classmethod
+    def from_field(cls, 
+            field: RealField2D, eps: float, alpha: float,
+            mu: Optional[float]=None) -> Self:
+        fef = FreeEnergyFunctional(eps, alpha)
+        f = fef.mean_free_energy_density(field)
+        F = fef.free_energy(field)
+        psibar = field.psi.mean()
+        
+        omega = None
+        Omega = None
+        
+        if mu is not None:
+            omega = fef.mean_grand_potential_density(field, mu)
+            Omega = fef.grand_potential(field, mu)
+
+        return cls(field.Lx, field.Ly, f, F, psibar, omega, Omega)
+
+

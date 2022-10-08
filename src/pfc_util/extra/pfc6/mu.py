@@ -22,3 +22,5 @@ class ConstantMuMinimizer(core.ConstantMuMinimizer, MinimizerMixin):
        
         self._exp_dt_kernel = np.exp(-dt*self._kernel)
         self._mu_dt_half = dt * mu / 2
+
+        self.initialize_fft()

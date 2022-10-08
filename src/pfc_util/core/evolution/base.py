@@ -26,6 +26,10 @@ class MinimizerMixin(TemporalEvolver[RealField2D]):
 
         self.display_format = '[{label}] f={f:.5f} F={F:.5f} psibar={psibar:.5f}'
 
+    def start(self) -> None:
+        super().start()
+        self.data.update(self.info)
+
     def initialize_fft(self):
         '''
         Initialize field's fft plans if not already initialized
@@ -58,7 +62,6 @@ class MuMinimizerMixin(MinimizerMixin):
         super().init_pfc_variables(eps)
         self.mu = mu
         self.info['mu'] = mu
-
         self.display_format = '[{label}] f={f:.5f} F={F:.5f} psibar={psibar:.5f} omega={omega:.5f} Omega={Omega:.5f}'
 
     def get_state_function(self):

@@ -23,6 +23,7 @@ class StressRelaxer(StressRelaxerBase, MuMinimizerMixin):
                 field, dt,
                 expansion_rate=expansion_rate, 
                 resize_cycle=resize_cycle)
+
         self.init_pfc_variables(eps, mu)
 
         self.mu = mu

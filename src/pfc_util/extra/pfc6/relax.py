@@ -23,6 +23,8 @@ class StressRelaxer(core.StressRelaxerBase, MinimizerMixin, core.MuMinimizerMixi
 
         self._mu_dt_half = dt * mu / 2
 
+        self.initialize_fft()
+
     def on_size_changed(self):
 
         self.Kx2 = self.field.Kx2 / self.fx**2

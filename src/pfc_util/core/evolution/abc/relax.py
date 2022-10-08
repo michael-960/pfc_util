@@ -83,8 +83,10 @@ class StressRelaxerBase(SplitStep[RealField2D]):
         self._resize_counter = 0
 
 
-    def on_start(self, n_steps: int, n_epochs: Optional[int]):
+    def start(self) -> None:
+        super().start()
         self.on_size_changed()
+
 
     def get_kspace_steps(self) -> List[Step]:
         def relax_stress_(dt: float):

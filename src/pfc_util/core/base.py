@@ -1,3 +1,4 @@
+from __future__ import annotations
 import numpy as np
 
 from ..utils.fft import rfft2, irfft2 
@@ -53,30 +54,34 @@ class StateFunction:
     def __init__(self, 
             Lx: float, Ly: float, f: float, F: float, psibar: float,
             omega: Optional[float]=None, Omega: Optional[float]=None):
-        self._content: Dict[str, float|None] = {}
+        self._data: Dict[str, float|None] = {}
 
-        self._content['Lx'] = Lx
-        self._content['Ly'] = Ly
-        self._content['f'] = f
-        self._content['F'] = F
-        self._content['psibar'] = psibar
-        self._content['omega'] = omega
-        self._content['Omega'] = Omega
+        self._data['Lx'] = Lx
+        self._data['Ly'] = Ly
+        self._data['f'] = f
+        self._data['F'] = F
+        self._data['psibar'] = psibar
+        self._data['omega'] = omega
+        self._data['Omega'] = Omega
 
     @property
-    def Lx(self): 'system width'; return self._content['Lx']
+    def Lx(self): 'system width'; return self._data['Lx']
     @property
-    def Ly(self): 'system height'; return self._content['Ly']
+    def Ly(self): 'system height'; return self._data['Ly']
     @property
-    def f(self): 'mean free energy density'; return self._content['f']
+    def f(self): 'mean free energy density'; return self._data['f']
     @property
-    def F(self): 'free energy'; return self._content['F']
+    def F(self): 'free energy'; return self._data['F']
     @property
-    def psibar(self): 'mean density'; return self._content['psibar']
+    def psibar(self): 'mean density'; return self._data['psibar']
     @property
-    def omega(self): 'mean grand potential density'; return self._content['omega']
+    def omega(self): 'mean grand potential density'; return self._data['omega']
     @property
-    def Omega(self): 'grand potential'; return self._content['Omega']
+    def Omega(self): 'grand potential'; return self._data['Omega']
+
+    @property
+    def data(self) -> Dict[str,float|None]:
+        return self._data.copy()
 
     @classmethod
     def from_field(cls, 
@@ -117,7 +122,7 @@ class StateFunction:
         state_func_list = []
 
         for item_name in items:
-            item = self._content[item_name] # ! modified
+            item = self._data[item_name] # ! modified
             if not item is None: 
                 state_func_list.append(f'{item_name}={item:{float_fmt}}')
         return delim_padded.join(state_func_list)
