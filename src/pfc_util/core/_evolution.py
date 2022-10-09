@@ -12,7 +12,6 @@ from torusgrid.fields import RealField2D
 from .base import StateFunction, FreeEnergyFunctional, import_state_function
 
 
-
 # deprecated module
 
 PFCStateFunction = StateFunction

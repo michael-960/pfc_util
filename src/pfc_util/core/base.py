@@ -1,50 +1,78 @@
 from __future__ import annotations
+from abc import ABC, abstractmethod
+from os import wait
 import numpy as np
+
 
 from ..utils.fft import rfft2, irfft2 
 
-from typing import Dict, Optional, final
+from typing import Dict, Generic, Optional, TypeVar, final
 from typing_extensions import Self
 
-from torusgrid.fields import RealField2D
+from torusgrid.misc.typing import generic
+import torusgrid as tg
 
-from torusgrid.fields import FreeEnergyFunctional as _FreeEnergyFunctional
 import numpy.typing as npt
 
 
 
-class FreeEnergyFunctional(_FreeEnergyFunctional[RealField2D]):
+
+T  = TypeVar('T', bound=tg.RealField)
+  
+  
+@generic
+class FreeEnergyFunctionalBase(ABC, Generic[T]):
+    '''
+    Base class for free energy functional
+    Only makes sense when the field.psi can be interpreted as a density.
+    '''
+    @abstractmethod
+    def derivative(self, field: T):
+        raise NotImplementedError()
+
+    @abstractmethod
+    def free_energy_density(self, field: T) -> npt.NDArray[np.floating]:
+        raise NotImplementedError()
+
+    def free_energy(self, field: T) -> np.floating:
+        return np.sum(self.free_energy_density(field)) * field.dv
+
+    def mean_free_energy_density(self, field: T) -> np.floating:
+        return np.mean(self.free_energy_density(field))
+
+    def grand_potential_density(self, field: T, mu: tg.FloatLike) -> npt.NDArray[np.floating]:
+        return self.free_energy_density(field) - mu * field.psi
+
+    def grand_potential(self, field: T, mu: tg.FloatLike) -> np.floating:
+        return np.sum(self.grand_potential_density(field, mu)) * field.dv
+
+    def mean_grand_potential_density(self, field: T, mu: tg.FloatLike) -> np.floating:
+      return np.mean(self.free_energy_density(field))
+
+
+class FreeEnergyFunctional(FreeEnergyFunctionalBase[tg.RealField]):
     '''
     PFC free energy fuctional
     '''
-    def __init__(self, eps: float):
+    def __init__(self, eps: tg.FloatLike):
         self.eps = eps
 
-    def free_energy_density(self, field: RealField2D) -> npt.NDArray[np.float_]:
-        kernel = 1-2*field.K2+field.K4
+    def free_energy_density(self, field: tg.RealField2D) -> npt.NDArray[np.floating]:
+        kernel = 1-2*field.k2+field.k4
         psi_k = rfft2(field.psi)
         psi_k_o = kernel * psi_k
         
         f = 1/2 * field.psi * irfft2(psi_k_o) + field.psi**4/4 - self.eps/2 * field.psi**2
         return np.real(f)
 
-    def derivative(self, field: RealField2D) -> npt.NDArray[np.float_]:
+    def derivative(self, field: tg.RealField2D) -> npt.NDArray[np.floating]:
         field.fft()
-        linear_term = ((1-field.K2)**2 - self.eps) * field.psi_k
+        linear_term = ((1-field.k2)**2 - self.eps) * field.psi_k
         field.ifft()
 
-        #local_mu = (1-self.eps) * field.psi + field.psi**3 + 2*D2psi + D4psi
         local_mu = irfft2(linear_term) + field.psi**3
+
         return local_mu
-
-    def grand_potential_density(self, field: RealField2D, mu: float) -> npt.NDArray[np.float_]:
-        return self.free_energy_density(field) - mu*field.psi
-
-    def mean_grand_potential_density(self, field: RealField2D, mu: float) -> float:
-        return np.mean(self.grand_potential_density(field, mu))
-
-    def grand_potential(self, field: RealField2D, mu: float) -> float:
-        return np.sum(self.grand_potential_density(field, mu)) * field.dV
 
 
 class StateFunction:
@@ -52,9 +80,11 @@ class StateFunction:
     An object representing a state function of a PFC field
     '''
     def __init__(self, 
-            Lx: float, Ly: float, f: float, F: float, psibar: float,
-            omega: Optional[float]=None, Omega: Optional[float]=None):
-        self._data: Dict[str, float|None] = {}
+            Lx: tg.FloatLike, Ly: tg.FloatLike,
+            f: tg.FloatLike, F: tg.FloatLike, psibar: tg.FloatLike,
+            omega: Optional[tg.FloatLike]=None, Omega: Optional[tg.FloatLike]=None):
+
+        self._data: Dict[str, tg.FloatLike|None] = {}
 
         self._data['Lx'] = Lx
         self._data['Ly'] = Ly
@@ -80,13 +110,13 @@ class StateFunction:
     def Omega(self): 'grand potential'; return self._data['Omega']
 
     @property
-    def data(self) -> Dict[str,float|None]:
+    def data(self) -> Dict[str,tg.FloatLike|None]:
         return self._data.copy()
 
     @classmethod
     def from_field(cls, 
-            field: RealField2D, eps: float, 
-            mu: Optional[float]=None) -> Self:
+            field: tg.RealField2D, eps: float, 
+            mu: Optional[tg.FloatLike]=None) -> Self:
         '''
         Alternative constructor for fields.
         '''
@@ -102,7 +132,7 @@ class StateFunction:
             omega = fef.mean_grand_potential_density(field, mu)
             Omega = fef.grand_potential(field, mu)
 
-        return cls(field.Lx, field.Ly, f, F, psibar, omega, Omega)
+        return cls(field.lx, field.ly, f, F, psibar, omega, Omega)
 
     @property
     def is_grand_canonical(self) -> bool: return not (self.omega is None)

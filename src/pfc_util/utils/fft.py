@@ -14,9 +14,7 @@ from scipy.fft import (
 
 )
 
-
 import numpy.typing as npt
-import numpy as np
 
 
 def __convert_type(__f):
