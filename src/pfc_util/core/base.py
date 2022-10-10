@@ -1,6 +1,5 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from os import wait
 import numpy as np
 
 
@@ -13,8 +12,6 @@ from torusgrid.misc.typing import generic
 import torusgrid as tg
 
 import numpy.typing as npt
-
-
 
 
 T  = TypeVar('T', bound=tg.RealField)
@@ -47,7 +44,7 @@ class FreeEnergyFunctionalBase(ABC, Generic[T]):
         return np.sum(self.grand_potential_density(field, mu)) * field.dv
 
     def mean_grand_potential_density(self, field: T, mu: tg.FloatLike) -> np.floating:
-      return np.mean(self.free_energy_density(field))
+      return np.mean(self.grand_potential_density(field, mu))
 
 
 class FreeEnergyFunctional(FreeEnergyFunctionalBase[tg.RealField]):

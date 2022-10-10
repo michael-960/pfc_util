@@ -2,6 +2,7 @@ import numpy as np
 
 from torusgrid.fields import RealField2D
 from torusgrid.dynamics import TemporalEvolver
+import torusgrid as tg
 
 from ..base import FreeEnergyFunctional, StateFunction
 
@@ -10,7 +11,7 @@ class MinimizerMixin(TemporalEvolver[RealField2D]):
     '''
     A mix-in class for PFC minimizers.
     '''
-    def init_pfc_variables(self, eps: float):
+    def init_pfc_variables(self, eps: tg.FloatLike):
         '''
         Setup variables related to PFC
         '''
@@ -41,7 +42,7 @@ class MinimizerMixin(TemporalEvolver[RealField2D]):
         psibar = np.mean(self.field.psi)
         f = self.fef.mean_free_energy_density(self.field)
         F = self.fef.free_energy(self.field)
-        return StateFunction(self.field.Lx, self.field.Ly, f, F, psibar)
+        return StateFunction(self.field.lx, self.field.ly, f, F, psibar)
 
     def get_evolver_state(self):
         return {'age': self.age}
@@ -58,7 +59,7 @@ class MuMinimizerMixin(MinimizerMixin):
     '''
     A mix-in class for constant chemical potential minimizers.
     '''
-    def init_pfc_variables(self, eps: float, mu: float):
+    def init_pfc_variables(self, eps: tg.FloatLike, mu: tg.FloatLike):
         super().init_pfc_variables(eps)
         self.mu = mu
         self.info['mu'] = mu
@@ -71,7 +72,7 @@ class MuMinimizerMixin(MinimizerMixin):
         omega = self.fef.mean_grand_potential_density(self.field, self.mu)
         Omega = self.fef.grand_potential(self.field, self.mu)
 
-        return StateFunction(self.field.Lx, self.field.Ly, f, F, psibar, omega, Omega)
+        return StateFunction(self.field.lx, self.field.ly, f, F, psibar, omega, Omega)
 
     def get_evolver_state(self):
         return {'age': self.age}

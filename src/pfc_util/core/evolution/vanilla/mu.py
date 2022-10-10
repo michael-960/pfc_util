@@ -28,7 +28,7 @@ class ConstantMuMinimizer(
         self.info['mu'] = self.mu = mu
         self.info['label'] = self.label = f'mu eps={eps:.5f} mu={mu:.5f} dt={dt:.5f}'
 
-        self._kernel = 1-2*self.field.K2+self.field.K4 - self.eps
+        self._kernel = 1-2*self.field.k2+self.field.k4 - self.eps
 
         self._exp_dt_kernel = np.exp(-dt*self._kernel)
         self._mu_dt_half = self.dt * self.mu / 2
@@ -37,16 +37,16 @@ class ConstantMuMinimizer(
 
     def get_realspace_steps(self) -> List[Step]:
         def evolve_mu_(dt: float):
-            self.field.psi[:] += self._mu_dt_half
+            self.field.psi[...] += self._mu_dt_half
 
         def evolve_nonlin_(dt: float): 
-            self.field.psi /= np.sqrt(1+self.field.psi**2*self.dt)
+            self.field.psi[...] /= np.sqrt(1+self.field.psi**2*self.dt)
 
         return [evolve_mu_, evolve_nonlin_]
 
     def get_kspace_steps(self) -> List[Step]:
         def evolve_k_(dt: float):
-            self.field.psi_k *= self._exp_dt_kernel
+            self.field.psi_k[...] *= self._exp_dt_kernel
         return [evolve_k_]
 
 

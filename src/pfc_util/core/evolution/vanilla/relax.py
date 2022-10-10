@@ -46,17 +46,17 @@ class StressRelaxer(StressRelaxerBase, MuMinimizerMixin):
     def get_realspace_steps(self) -> List[Callable[[float], None]]:
         f = self.field
         def step_mu(dt: float):
-            f.psi += dt * self.mu
+            f.psi[...] += dt * self.mu
 
         def step_nonlin(dt: float):
-            f.psi /=np.sqrt(1+f.psi**2*dt*2)
+            f.psi[...] /=np.sqrt(1+f.psi**2*dt*2)
 
         return [step_mu, step_nonlin]
 
     def step_kernel(self, dt: float):
         f = self.field
         _exp_dt_kernel = np.exp(-dt*self._kernel)
-        f.psi_k *= _exp_dt_kernel
+        f.psi_k[...] *= _exp_dt_kernel
 
     def update_domega_kernels(self):
         self._domega_kernels[:,:,:] = [
