@@ -5,7 +5,7 @@ import numpy as np
 
 from ..utils.fft import rfft2, irfft2 
 
-from typing import Dict, Generic, Optional, TypeVar, final
+from typing import Dict, Generic, Optional, TypeVar
 from typing_extensions import Self
 
 from torusgrid.misc.typing import generic
@@ -45,6 +45,7 @@ class FreeEnergyFunctionalBase(ABC, Generic[T]):
 
     def mean_grand_potential_density(self, field: T, mu: tg.FloatLike) -> np.floating:
       return np.mean(self.grand_potential_density(field, mu))
+
 
 
 class FreeEnergyFunctional(FreeEnergyFunctionalBase[tg.RealField]):
@@ -111,8 +112,8 @@ class StateFunction:
         return self._data.copy()
 
     @classmethod
-    def from_field(cls, 
-            field: tg.RealField2D, eps: float, 
+    def from_field(cls,
+            field: tg.RealField2D, eps: tg.FloatLike,
             mu: Optional[tg.FloatLike]=None) -> Self:
         '''
         Alternative constructor for fields.
