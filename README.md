@@ -1,46 +1,40 @@
-PFC simulation in python
-========================
+# PFC simulation in python
 
 created by michael in 2022/04
 
-pfc\_util is a python package for PFC (phase field crystal) simulations.
+pfc_util is a python package for PFC (phase field crystal) simulations.
 
-Required Packages
-=================
+# Dependencies
 
 -   numpy
 -   scipy
 -   matplotlib
 -   pyfftw
--   tqdm
 -   torusgrid
--   michael960lib
+-   rich
 
-Modules
-=======
+# Modules
 
-`pfc_util.pfc`{.sourceCode} - High-level main module that contains the
-class `pfc.PFC`{.sourceCode} whose instances are PFC models capable of
-recording and plotting minimization history etc. Save and load models in
-npz format with `pfc.PFC.save()`{.sourceCode} and
-`pfc.load_pfc_model()`{.sourceCode}.
+`pfc_util.core` - Core module; definitions of PFC free energy
+functional, state functions, as well as minimizers
 
-`pfc_util.core.base`{.sourceCode} - Definitions of PFC free energy
-functional and state functions.
+`pfc_util.extra` - Extensions to vanilla PFC. Currently includes `pfc6`,
+which is a 6th-order generalization to the PFC functional
 
-`pfc_util.core.evolution`{.sourceCode} - PFC minimizers, including
-constant chemical potential & nonlocal conserved minimization, stress
-relaxer and others.
+`pfc_util.toolkit` - Static preminimized solid/liquid profiles & utility
+functions.
 
-`pfc_util.toolkit.static`{.sourceCode} - Static objects access, mostly
-preminimized solid/liquid profiles.
+Minimizers ======= The package provides three main means of
+minimizing/evolving a PFC system:
 
-`pfc_util.toolkit.routine`{.sourceCode} - Routine high-level utility,
-e.g. `pfc_util.toolkit.routine.find_coexistent_mu()`{.sourceCode} uses
-binary search to look for solid-liquid coexistence under constant
-chemical potential.
+-   
 
-`pfc_util.ortho_lattice_generator`{.sourceCode} - Generates rotated
-profiles subject to periodic boundary condition.
+    Constant chemical potential - The grand potential = free energy - (chemical potential) \* (mean density)
 
-`pfc_util.profile_prompt`{.sourceCode} - Interactive PFC Prompt (WIP).
+    :   | is minimized with fixed chemical potential
+
+-   Stress relaxer - The grand potential **density** is minimized with
+    respect to the density field and system size
+
+-   Conserved dynamics - The free energy is minimized with fixed mean
+    density
