@@ -13,6 +13,15 @@ Dependencies
 * torusgrid
 * rich
 
+Installation
+====================
+Install via pip:
+
+.. code-block:: bash
+
+    pip install pfc-util
+
+
 
 Modules
 ========
