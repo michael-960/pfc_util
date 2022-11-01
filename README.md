@@ -13,6 +13,14 @@ pfc_util is a python package for PFC (phase field crystal) simulations.
 -   torusgrid
 -   rich
 
+# Installation
+
+Install via pip:
+
+``` bash
+pip install pfc-util
+```
+
 # Modules
 
 `pfc_util.core` - Core module; definitions of PFC free energy
