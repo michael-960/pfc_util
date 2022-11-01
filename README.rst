@@ -1,36 +1,38 @@
 PFC simulation in python
 ==============================
-
 created by michael in 2022/04
 
 pfc_util is a python package for PFC (phase field crystal) simulations.
 
-Required Packages
+Dependencies
 ======================
 * numpy
 * scipy
 * matplotlib
 * pyfftw
-* tqdm
 * torusgrid
-* michael960lib
+* rich
 
 
 Modules
 ========
-:code:`pfc_util.pfc` - High-level main module that contains the class :code:`pfc.PFC` whose instances are PFC models capable of recording and plotting minimization history etc. Save and load models in npz format with :code:`pfc.PFC.save()` and :code:`pfc.load_pfc_model()`.
+:code:`pfc_util.core` - Core module; definitions of PFC free energy functional, state functions, as well as minimizers
 
-:code:`pfc_util.core.base` - Definitions of PFC free energy functional and state functions.
+:code:`pfc_util.extra` - Extensions to vanilla PFC. Currently includes :code:`pfc6`, which is a 6th-order generalization to the PFC functional
 
-:code:`pfc_util.core.evolution` - PFC minimizers, including constant chemical potential & nonlocal conserved minimization, stress relaxer and others.
+:code:`pfc_util.toolkit` - Static preminimized solid/liquid profiles & utility functions.
 
-:code:`pfc_util.toolkit.static` - Static objects access, mostly preminimized solid/liquid profiles.
 
-:code:`pfc_util.toolkit.routine` - Routine high-level utility, e.g. :code:`pfc_util.toolkit.routine.find_coexistent_mu()`
-uses binary search to look for solid-liquid coexistence under constant chemical potential.
 
-:code:`pfc_util.ortho_lattice_generator` - Generates rotated profiles subject to periodic boundary condition.
+Minimizers
+=======
+The package provides three main means of minimizing/evolving a PFC system:
 
-:code:`pfc_util.profile_prompt` - Interactive PFC Prompt (WIP).
+* Constant chemical potential - The grand potential = free energy - (chemical potential) * (mean density) 
+                                | is minimized with fixed chemical potential
+
+* Stress relaxer - The grand potential **density** is minimized with respect to the density field and system size
+
+* Conserved dynamics - The free energy is minimized with fixed mean density
 
 

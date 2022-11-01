@@ -52,7 +52,10 @@ _liq_path_map = {
     '0.5': 'uc_eps0.5_liq.field'
 }
 
-def get_relaxed_minimized_coexistent_unit_cell(eps: str, liquid=False) -> RealField2D:
+def get_unit_cell(eps: str, liquid=False) -> RealField2D:
+    """
+    Retrieve a relaxed and minimized solid/liquid unit cell
+    """
     if not type(eps) is str:
         raise ValueError(f'eps should be specified as a string, not {type(eps)}')
 
@@ -61,7 +64,9 @@ def get_relaxed_minimized_coexistent_unit_cell(eps: str, liquid=False) -> RealFi
             raise ValueError(f'no static resource for eps=\'{eps}\' liquid currently')
 
         with pkg_resources.path(_res, _liq_path_map[eps]) as pth:
-            field = tg.proxies.RealField2DNPZ.read(str(pth))
+            field = tg.load(tg.RealField2D, str(pth), autometa=True)
+            # field = tg.proxies.RealField2DNPZ.read(str(pth))
+
         return field
 
     else:
@@ -72,6 +77,7 @@ def get_relaxed_minimized_coexistent_unit_cell(eps: str, liquid=False) -> RealFi
             field = tg.proxies.RealField2DNPZ.read(str(pth))
         return field
 
+get_relaxed_minimized_coexistent_unit_cell = get_unit_cell # deprecated
 
 
 _coex_epsmu_bounds = {
@@ -121,17 +127,29 @@ _coex_epsucf = {
 }
 '''
 
-def get_coexistent_mu_bounds(eps: str) -> Tuple[float, float]:
+def get_coexistent_mu_bounds(eps: str) -> Tuple[tg.FloatLike, tg.FloatLike]:
+    """
+    Return the bounds of solid-liquid coexistent chemical potential
+    """
     if not eps in _coex_epsmu_bounds.keys():
         raise ValueError(f'no coexistent mu for eps=\'{eps}\' currently')
     return _coex_epsmu_bounds[eps]
 
-def get_coexistent_mu_final(eps: str) -> float:
+
+def get_coexistent_mu_final(eps: str) -> tg.FloatLike:
+    """
+    Return the final value (during simulation) of solid-liquid coexistent chemical
+    potential
+    """
     if not eps in _coex_epsmu_final.keys():
         raise ValueError(f'no coexistent mu for eps=\'{eps}\' currently')
     return _coex_epsmu_final[eps]
 
-def get_relaxed_unit_cell_size(eps: str, ratio=True) -> Tuple[float, float]:
+
+def get_relaxed_unit_cell_size(eps: str, ratio=True) -> Tuple[tg.FloatLike, tg.FloatLike]:
+    """
+    Return the unit cell size at solid-liquid equilibrium.
+    """
     if not type(eps) is str:
         raise ValueError(f'eps should be specified as a string, not {type(eps)}')
 
@@ -140,8 +158,8 @@ def get_relaxed_unit_cell_size(eps: str, ratio=True) -> Tuple[float, float]:
 
     field = get_relaxed_minimized_coexistent_unit_cell(eps)
     if ratio:
-        return (field.Lx / np.pi / 4, field.Ly / np.pi / 4 * np.sqrt(3))
+        return (field.lx / np.pi / 4, field.ly / np.pi / 4 * np.sqrt(3))
     else:
-        return (field.Lx, field.Ly)
+        return (field.lx, field.ly)
 
 

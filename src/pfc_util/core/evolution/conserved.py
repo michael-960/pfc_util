@@ -3,27 +3,26 @@ from typing import Tuple
 import numpy as np
 
 from torusgrid.fields import RealField2D
-from torusgrid.dynamics import SecondOrderRK4, FirstOrderRK4
+from torusgrid.dynamics import SecondOrderRK4, FirstOrderRK4, TemporalEvolver
 import torusgrid as tg
 
 
 import numpy.typing as npt
 
-from ..base import MinimizerMixin
+from .base import MinimizerMixin
 
 
-class NonlocalConservedMinimizer(MinimizerMixin):
-    '''
+class NonlocalConservedMinimizer(TemporalEvolver[RealField2D], MinimizerMixin):
+    """
     Nonlocal conserved dynamics by forcing mean density to be constant
-    '''
+    """
     def __init__(self,
             field: RealField2D, 
             dt: tg.FloatLike, eps: tg.FloatLike):
-        super().__init__(field, dt)
-        self.init_pfc_variables(eps)
 
-        self.info['minimizer'] = 'nonlocal'
-        self.info['label'] = self.label = f'nonlocal eps={eps:.5f} dt={dt:.5f}'
+        super().__init__(field, dt)
+
+        self.init_pfc_variables(eps)
 
         self._kernel = 1-2*self.field.k2+self.field.k4 - self.eps
         self._exp_dt_kernel = np.exp(-dt*self._kernel)
@@ -46,35 +45,34 @@ class NonlocalConservedMinimizer(MinimizerMixin):
         self.field.psi[...] /= np.sqrt(1+self.field.psi**2*self.dt)
         self.field.psi[...] += - np.mean(self.field.psi) + self.psibar
 
+    def start(self) -> None:
+        super().start()
+        self.data['minimizer'] = 'nonlocal'
 
 
 class NonlocalConservedRK4(SecondOrderRK4[RealField2D], MinimizerMixin):
-    '''
+    """
     RK4 nonlocal conserved dynamics with inertia
-    '''
+    """
     def __init__(self, 
-            field: RealField2D, dt: float, eps: float, *,
-            k_regularizer=0.1, inertia=100):
+            field: RealField2D, 
+            dt: tg.FloatLike, eps: tg.FloatLike, *,
+            k_regularizer: tg.FloatLike=0.1, 
+            inertia: tg.FloatLike=100):
+
         super().__init__(field, dt)
         self.init_pfc_variables(eps)
 
         self.R = k_regularizer
         self.inertia = inertia
 
-        self.info['minimizer'] = 'nonlocal-rk4'
-        self.info['M'] = inertia
-        self.info['R'] = k_regularizer
-        self.info['label'] = self.label = f'nonlocal-rk4 eps={eps} dt={dt} R={k_regularizer} M={inertia}'
-
         self.initialize_fft()
 
         self._deriv = RealField2D(
                 field.lx, field.ly, field.nx, field.ny,
-                precision=field._precision)
+                precision=field.precision)
 
         self._deriv.initialize_fft()
-
-
 
     def psi_dot(self) -> Tuple[npt.NDArray, npt.NDArray]:
         self._deriv.psi[...] = -self.fef.derivative(self.grid_tmp)
@@ -84,11 +82,17 @@ class NonlocalConservedRK4(SecondOrderRK4[RealField2D], MinimizerMixin):
         F = self._deriv.psi - np.mean(self._deriv.psi)
         return self.dgrid_tmp.psi*self.inertia, -(self.dgrid_tmp.psi - F)
 
+    def start(self) -> None:
+        super().start()
+        self.data['minimizer'] = 'nonlocal-rk4'
+        self.data['M'] = self.inertia
+        self.data['R'] = self.R
+
 
 class NonlocalConservedRK4Plain(FirstOrderRK4[RealField2D], MinimizerMixin):
-    '''
+    """
     RK4 nonlocal conserved dynamics without inertia
-    '''
+    """
 
     def __init__(self, 
             field: RealField2D, dt: float, eps: float, *,
@@ -99,9 +103,9 @@ class NonlocalConservedRK4Plain(FirstOrderRK4[RealField2D], MinimizerMixin):
 
         self.R = k_regularizer
 
-        self.info['minimizer'] = 'nonlocal-rk4'
-        self.info['R'] = k_regularizer
-        self.info['label'] = self.label = f'nonlocal-rk4 eps={eps} dt={dt} R={k_regularizer}'
+        self.data['minimizer'] = 'nonlocal-rk4'
+        self.data['R'] = k_regularizer
+        self.data['label'] = self.label = f'nonlocal-rk4 eps={eps} dt={dt} R={k_regularizer}'
 
         self.initialize_fft()
 
@@ -117,7 +121,7 @@ class NonlocalConservedRK4Plain(FirstOrderRK4[RealField2D], MinimizerMixin):
         return F
 
 
-class NonlocalDescent(MinimizerMixin):
+class NonlocalDescent(TemporalEvolver[RealField2D], MinimizerMixin):
     def __init__(self, 
             field: RealField2D, dt: float, eps: float, *,
             k_regularizer: float=0.1):
@@ -126,10 +130,7 @@ class NonlocalDescent(MinimizerMixin):
         self.init_pfc_variables(eps)
 
         self.R = k_regularizer
-        self.info['minimizer'] = 'nonlocal-desc'
-        self.info['R'] = k_regularizer
-        self.info['label'] = self.label = f'nonlocal-desc eps={eps} dt={dt} R={k_regularizer}'
-
+        
         self.initialize_fft()
 
         self.field_tmp = self.field.copy()
@@ -158,6 +159,9 @@ class NonlocalDescent(MinimizerMixin):
         dT = self.dt / (np.sum(F**2)*self.field.dv + cutoff)
         self.field.psi[...] += F * dT
 
-
+    def start(self) -> None:
+        super().start()
+        self.data['minimizer'] = 'nonlocal-desc'
+        self.data['R'] = self.R
 
 

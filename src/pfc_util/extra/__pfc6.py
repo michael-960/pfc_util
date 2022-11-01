@@ -1,3 +1,5 @@
+raise ImportError('Module is outdated and deprecated')
+
 from __future__ import annotations
 from typing import Callable, Optional
 

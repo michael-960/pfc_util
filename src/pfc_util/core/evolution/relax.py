@@ -2,21 +2,24 @@ from typing import Callable, List
 
 import numpy as np
 
-from torusgrid.fields import RealField2D
+import torusgrid as tg
 
-from ..base import MuMinimizerMixin
+from .base import MinimizerMixin, MuMinimizerMixin
 
-from ..abc import StressRelaxerBase
+from .relax_base import StressRelaxerBase
 
 
 
-class StressRelaxer(StressRelaxerBase, MuMinimizerMixin):
-    '''
+class StressRelaxer(
+        StressRelaxerBase, 
+        MinimizerMixin,
+        MuMinimizerMixin):
+    """
     Constant mu stress relaxer
-    '''
-    def __init__(self, field: RealField2D, 
-            dt: float, eps: float, mu: float, *,
-            expansion_rate: float=1., resize_cycle: int = 31):
+    """
+    def __init__(self, field: tg.RealField2D, 
+            dt: tg.FloatLike, eps: tg.FloatLike, mu: tg.FloatLike, *,
+            expansion_rate: tg.FloatLike=1., resize_cycle: int = 31):
 
 
         super().__init__(
@@ -24,21 +27,17 @@ class StressRelaxer(StressRelaxerBase, MuMinimizerMixin):
                 expansion_rate=expansion_rate, 
                 resize_cycle=resize_cycle)
 
-        self.init_pfc_variables(eps, mu)
+        self.init_pfc_variables(eps)
+        self.init_mu(mu)
 
         self.mu = mu
-        self.info['mu'] = mu
-        self.info['label'] = self.label = f'stress-relax eps={eps:.5f} mu={mu:.5f} dt={dt:.5f}'
-        self.info['minimizer'] = 'stress-relax'
-        self.info['expansion_rate'] = expansion_rate
-
-        self.display_format = '[{label}][{age:.4f}] Lx={Lx:.5f} Ly={Ly:.5f} f={f:.5f} F={F:.5f} omega={omega:.5f} Omega={Omega:.5f} '
-
+        
         self.initialize_fft()
 
     def on_size_changed(self):
-        self.Kx2 = self.field.Kx2 / self.fx**2
-        self.Ky2 = self.field.Ky2 / self.fy**2
+        self.Kx2 = self.field.kx**2 / self.fx**2
+        self.Ky2 = self.field.ky**2 / self.fy**2
+
         self.K2 = self.Kx2 + self.Ky2
         self.K4 = self.K2**2
         self._kernel = 1-2*self.K2+self.K4 - self.eps
@@ -66,4 +65,9 @@ class StressRelaxer(StressRelaxerBase, MuMinimizerMixin):
                 -2/self.Ly**2*self.Ky2*(3-5*self.Ky2-3*self.Kx2),
                 2/self.Lx/self.Ly * 2*self.Kx2*self.Ky2
         ]
+
+    def start(self) -> None:
+        super().start()    
+        self.data['minimizer'] = 'stress-relax'
+        self.data['expansion_rate'] = self.expansion_rate
 

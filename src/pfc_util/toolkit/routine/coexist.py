@@ -1,47 +1,50 @@
 from __future__ import annotations
 
-from typing import Optional, Callable, List, TypeVar, TypedDict
+from typing import Optional, List, TypedDict
 import torusgrid as tg
 import numpy as np
-from torusgrid.dynamics import Evolver, EvolverHooks
+from torusgrid.dynamics import Evolver, EvolverHooks, FieldEvolver
+
+from .base import MuMinimizerSupplier
 
 import rich
+from ...core import FreeEnergyFunctionalBase
+from ...utils import is_liquid
+
 
 class MuSearchRecord(TypedDict):
-    mu: List[float]
-    omega_s: List[float]
-    omega_l: List[float]
+    mu: List[tg.FloatLike]
+    omega_s: List[tg.FloatLike]
+    omega_l: List[tg.FloatLike]
 
-    mu_min_initial: float
-    mu_max_initial: float
+    mu_min_initial: tg.FloatLike
+    mu_max_initial: tg.FloatLike
     
-    mu_min_final: float
-    mu_max_final: float
+    mu_min_final: tg.FloatLike
+    mu_max_final: tg.FloatLike
 
-
-def is_liquid(psi: np.ndarray, tol=1e-5):
-    return np.max(psi) - np.min(psi) <= tol
 
 
 def find_coexistent_mu(
     solid_field: tg.RealField2D,
-    mu_min: float, mu_max: float,
-    fef: tg.FreeEnergyFunctional, *,
+    mu_min: tg.FloatLike, mu_max: tg.FloatLike,
+    fef: FreeEnergyFunctionalBase, *,
     
-    relaxer_supplier: Callable[[tg.RealField2D,float], Evolver[tg.RealField2D]],
+    relaxer_supplier: MuMinimizerSupplier,
     relaxer_nsteps: int = 31,
-    relaxer_hooks: Optional[EvolverHooks]=None,
+    relaxer_hooks: Optional[EvolverHooks[FieldEvolver[tg.RealField2D]]]=None,
 
-    const_mu_supplier: Callable[[tg.RealField2D, float], Evolver[tg.RealField2D]],
+    const_mu_supplier: MuMinimizerSupplier,
     const_mu_nsteps: int = 31,
-    const_mu_hooks: Optional[EvolverHooks]=None,
+    const_mu_hooks: Optional[EvolverHooks[FieldEvolver[tg.RealField2D]]]=None,
     
     max_iters: Optional[int]=None,
-    precision: float=0.,
+    precision: tg.FloatLike=0.,
 
-    verbose: bool = True
-    ):
-    '''
+    verbose: bool = True,
+    liquid_tol: tg.FloatLike = 1e-4
+):
+    """
     Given: 
         - a solid profile 
         - minimum and maximum values of chemical potential
@@ -53,16 +56,25 @@ def find_coexistent_mu(
     <=>  F[solid] - mu * N_s = F[liquid] - mu * N_l
 
     via binary search. 
-    '''
+    """
+
+    dtype = tg.get_real_dtype(solid_field.precision)
+
+    mu_min = dtype(mu_min)
+    mu_max = dtype(mu_max)
+
+    digits = round(-np.log10(precision+1e-22) + 2)
+
     if mu_min >= mu_max:
         raise ValueError('mu_min must be smaller than mu_max')
+
     if max_iters is None and precision == 0.:
         raise ValueError('binary search will not stop with max_iters=None and precision=0') 
 
     if max_iters is None: max_iters = 2**32
 
     sol = solid_field
-    liq = tg.liquefy(solid_field)
+    liq = tg.const_like(solid_field)
 
     rec: MuSearchRecord = {
             'mu': [], 
@@ -72,33 +84,33 @@ def find_coexistent_mu(
             'mu_max_initial': mu_max,
             'mu_min_final': -1,
             'mu_max_final': -1,
-        }
+            }
 
    
     console = rich.get_console()
 
     for _ in range(max_iters): # type: ignore
-        if mu_max - mu_min <= precision:
+        if np.abs(mu_max - mu_min) <= precision * (mu_max+mu_min)/2:
             break
+
         mu = (mu_min + mu_max) / 2
         if verbose:
             console.rule()
-            console.log(f'current bounds: {mu_min} ~ {mu_max}')
+            mu_min_str = tg.highlight_last_digits(tg.float_fmt(mu_min, digits), 2, 'red')
+            mu_max_str = tg.highlight_last_digits(tg.float_fmt(mu_max, digits), 2, 'red')
+            console.log(f'current mu bounds: {mu_min_str} ~ {mu_max_str}')
 
         '''relax solid and resize liquid accordingly'''
         relaxer = relaxer_supplier(sol, mu)
         relaxer.run(relaxer_nsteps, hooks=relaxer_hooks)
-        liq.set_size(sol.Lx, sol.Ly)
+        liq.set_size(sol.lx, sol.ly)
         
         '''evolve solid under constant mu'''
-        # minim = const_mu_supplier(sol, mu)
-        # minim.run(const_mu_nsteps, hooks=const_mu_hooks)
 
         '''calculate solid mean grand potential'''
         omega_s = fef.mean_free_energy_density(sol) - mu*sol.psi.mean()
 
-
-        if is_liquid(sol.psi, tol=1e-4):
+        if is_liquid(sol.psi, tol=liquid_tol):
             if verbose:
                 console.log(f'solid field was liquefied during minimization with mu={mu}')
             break
@@ -129,9 +141,19 @@ def find_coexistent_mu(
             console.log('Aborted.')
             break
 
-
     rec['mu_min_final'] = mu_min
     rec['mu_max_final'] = mu_max
+
+    if verbose:
+        console.rule()
+        console.log('Results:')
+        mu_min_str = tg.highlight_last_digits(tg.float_fmt(mu_min, digits), 2, 'red')
+        mu_max_str = tg.highlight_last_digits(tg.float_fmt(mu_max, digits), 2, 'red')
+        final_mu_str = tg.highlight_last_digits(tg.float_fmt(mu, digits), 2, 'red')
+
+        console.log(f'mu min   = {mu_min_str}')
+        console.log(f'mu max   = {mu_max_str}')
+        console.log(f'final mu = {final_mu_str}')
 
     return rec
 

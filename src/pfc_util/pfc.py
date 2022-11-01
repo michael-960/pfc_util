@@ -19,9 +19,10 @@ from .core.evolution import ConstantChemicalPotentialMinimizer, NonlocalConserve
 from .core.base import PFCStateFunction
 from .history import PFCHistory, PFCMinimizerHistoryBlock, PFCEditActionHistoryBlock, import_history
 
+warnings.warn('the PFC module is currently unmaintained')
 
 # matplotlib.use('TKAgg')
-matplotlib.style.use('fast')
+# matplotlib.style.use('fast')
 
 
 class PFC:

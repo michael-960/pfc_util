@@ -1,3 +1,6 @@
+
+raise ImportError('Module is outdated and deprecated')
+
 import tqdm
 from typing import Optional
 

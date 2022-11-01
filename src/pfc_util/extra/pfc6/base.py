@@ -1,61 +1,75 @@
 from __future__ import annotations
-from typing import Optional
-from typing_extensions import Self
-
-from torusgrid import RealField2D
-from ...utils.fft import rfft2, irfft2
+from typing import List, Tuple, final
+import torusgrid as tg
 import numpy as np
-
+from ...utils.fft import rfft2, irfft2
 from ... import core
 
 
-class FreeEnergyFunctional(core.FreeEnergyFunctional):
-    def __init__(self, eps: float, alpha: float):
+class FreeEnergyFunctional(core.FreeEnergyFunctionalBase[tg.RealField2D]):
+    """
+    PFC6 free energy functional
+    """
+    def __init__(self, eps: tg.FloatLike, alpha: tg.FloatLike, beta: tg.FloatLike):
+        """
+        Parameters:
+            eps: PFC epsilon
+            alpha: 6th order derivative coefficient
+            beta: psi^6/6 coefficient
+        """
         self.eps = eps
         self.alpha = alpha
+        self.beta = beta
 
-    def free_energy_density(self, field: RealField2D):
-        kernel = (1-field.K2)**2 +\
-                self.alpha*(field.K4*field.K2 - 2*field.K4 + field.K2)
+    def free_energy_density(self, field: tg.RealField):
+        kernel = (1-field.k2)**2 +\
+                self.alpha*(field.k4*field.k2 - 2*field.k4 + field.k2)
+
         psi_k = rfft2(field.psi)
         psi_k_o = kernel * psi_k
-        f = 1/2 * field.psi * irfft2(psi_k_o) + field.psi**4/4 - self.eps/2 * field.psi**2
+        f = 1/2 * field.psi * irfft2(psi_k_o) + field.psi**4/4 - self.eps/2 * field.psi**2 + self.beta * field.psi**6 / 6
         return np.real(f)
 
-    def derivative(self, field):
+    def derivative(self, field: tg.RealField):
         field.fft()
-        linear_term = ((1-field.K2)**2 + self.alpha*field.K2*(1-field.K2)**2 - self.eps) * field.psi_k
+        linear_term = ((1-field.k2)**2 + self.alpha*field.k2*(1-field.k2)**2 - self.eps) * field.psi_k
         field.ifft()
-
-        local_mu = irfft2(linear_term) + field.psi**3
+        local_mu = irfft2(linear_term) + field.psi**3 + self.beta * field.psi**5
         return local_mu
 
 
-class MinimizerMixin(core.MinimizerMixin):
-    def init_pfc6_variables(self, alpha: float):
-        self.alpha = alpha
-        self.info['system'] = 'pfc6'
-        self.info['alpha'] = alpha
-        self.fef = FreeEnergyFunctional(self.eps, alpha)
-
-
-class StateFunction(core.StateFunction):
+@final
+class StateFunction(core.FieldStateFunction2D):
     @classmethod
-    def from_field(cls, 
-            field: RealField2D, eps: float, alpha: float,
-            mu: Optional[float]=None) -> Self:
-        fef = FreeEnergyFunctional(eps, alpha)
-        f = fef.mean_free_energy_density(field)
-        F = fef.free_energy(field)
-        psibar = field.psi.mean()
-        
-        omega = None
-        Omega = None
-        
-        if mu is not None:
-            omega = fef.mean_grand_potential_density(field, mu)
-            Omega = fef.grand_potential(field, mu)
+    def free_energy_functional(
+        cls, *, 
+        eps: tg.FloatLike, alpha: tg.FloatLike, beta: tg.FloatLike
+    ) -> core.FreeEnergyFunctionalBase[tg.RealField2D]:
+        return FreeEnergyFunctional(eps, alpha, beta)
 
-        return cls(field.Lx, field.Ly, f, F, psibar, omega, Omega)
+    @staticmethod
+    def environment_params() -> Tuple[List[str], List[str]]:
+        return ['eps', 'alpha', 'beta'], ['mu']
+
+class MinimizerMixin(core.MinimizerMixin):
+    """
+    Mixin for PFC6 minimizers
+
+    Subclasses should call init_pfc6_variables instead of init_pfc_variables
+    """
+    def init_pfc6_variables(self, 
+                            eps: tg.FloatLike,
+                            alpha: tg.FloatLike, beta: tg.FloatLike):
+
+        super().init_pfc_variables(eps)
+        self.fef = FreeEnergyFunctional(self.eps, alpha, beta)
+        self.alpha = alpha
+        self.beta = beta
+
+    def start(self) -> None:
+        super().start()
+        self.data['system'] = 'pfc6'
+        self.data['alpha'] = self.alpha
+        self.data['beta'] = self.beta
 
 

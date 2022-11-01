@@ -4,29 +4,27 @@ from typing import List
 
 import numpy as np
 
-from torusgrid.dynamics import SplitStep, Step
+import torusgrid as tg
+from torusgrid.dynamics import FieldEvolver, SplitStep, Step
 
-from torusgrid.fields import RealField2D
-
-from ..base import MuMinimizerMixin
+from .base import MinimizerMixin, MuMinimizerMixin
 
 
 class ConstantMuMinimizer(
-        SplitStep[RealField2D], MuMinimizerMixin
-    ):
-    '''
+        SplitStep[tg.RealField2D], 
+        MinimizerMixin,
+        MuMinimizerMixin):
+    """
     PFC constant chemical potential minimizer with split-step FFT
-    '''
+    """
     def __init__(self, 
-            field: RealField2D, 
-            dt: float, eps: float, mu: float):
+            field: tg.RealField2D, 
+            dt: tg.FloatLike, eps: tg.FloatLike, mu: tg.FloatLike
+        ):
 
         super().__init__(field, dt)
-        self.init_pfc_variables(eps, mu)
-
-        self.info['minimizer'] = 'mu'
-        self.info['mu'] = self.mu = mu
-        self.info['label'] = self.label = f'mu eps={eps:.5f} mu={mu:.5f} dt={dt:.5f}'
+        self.init_pfc_variables(eps)
+        self.init_mu(mu)
 
         self._kernel = 1-2*self.field.k2+self.field.k4 - self.eps
 
@@ -36,23 +34,19 @@ class ConstantMuMinimizer(
         self.initialize_fft()
 
     def get_realspace_steps(self) -> List[Step]:
-        def evolve_mu_(dt: float):
+        def evolve_mu_(dt: tg.FloatLike):
             self.field.psi[...] += self._mu_dt_half
 
-        def evolve_nonlin_(dt: float): 
+        def evolve_nonlin_(dt: tg.FloatLike): 
             self.field.psi[...] /= np.sqrt(1+self.field.psi**2*self.dt)
 
         return [evolve_mu_, evolve_nonlin_]
 
     def get_kspace_steps(self) -> List[Step]:
-        def evolve_k_(dt: float):
+        def evolve_k_(dt: tg.FloatLike):
             self.field.psi_k[...] *= self._exp_dt_kernel
         return [evolve_k_]
 
-
-
-# Deprecated
-ConstantChemicalPotentialMinimizer = ConstantMuMinimizer
-
-
-
+    def start(self) -> None:
+        super().start()
+        self.data['minimizer'] = 'mu'

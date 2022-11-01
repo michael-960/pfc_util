@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.fft import rfft2, irfft2
 
-from michael960lib.common import overrides, deprecated, experimental
+from michael960lib.common import overrides
 from torusgrid.fields import RealField2D
 from torusgrid.dynamics import FreeEnergyFunctional2D, NoiseGenerator2D
 from ..core.base import PFCFreeEnergyFunctional
