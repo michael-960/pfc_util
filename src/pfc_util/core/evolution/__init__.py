@@ -1,4 +1,4 @@
-from .base import MinimizerMixin, MuMinimizerMixin
+from .base import MinimizerMixin, MuMinimizerMixin, NonlocalConservedRK4Base
 
 from .conserved import NonlocalConservedMinimizer, NonlocalConservedRK4, NonlocalConservedRK4Plain, NonlocalDescent
 

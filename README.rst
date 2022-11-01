@@ -78,7 +78,7 @@ unit cell to :code:`solid_eps0.05_mu0.08.field`
                 + tg.dynamics.Text('psibar={psibar:.8f}')
                 + tg.dynamics.DetectSlow(
                     'psibar', rtol=1e-9, atol=0, period=8, patience=200
-                ) # make the minizer stop if psibar varies sufficiently slowly
+                ) # make the minimizer stop if psibar varies sufficiently slowly
             )
         )
 

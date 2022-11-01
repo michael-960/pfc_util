@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Tuple
+from typing import Tuple, final
 import numpy as np
 
 from torusgrid.fields import RealField2D
@@ -9,7 +9,8 @@ import torusgrid as tg
 
 import numpy.typing as npt
 
-from .base import MinimizerMixin
+from .base import MinimizerMixin, NonlocalConservedRK4Base
+
 
 
 class NonlocalConservedMinimizer(TemporalEvolver[RealField2D], MinimizerMixin):
@@ -50,7 +51,8 @@ class NonlocalConservedMinimizer(TemporalEvolver[RealField2D], MinimizerMixin):
         self.data['minimizer'] = 'nonlocal'
 
 
-class NonlocalConservedRK4(SecondOrderRK4[RealField2D], MinimizerMixin):
+# class NonlocalConservedRK4(SecondOrderRK4[RealField2D], MinimizerMixin):
+class NonlocalConservedRK4(NonlocalConservedRK4Base, MinimizerMixin):
     """
     RK4 nonlocal conserved dynamics with inertia
     """
@@ -60,33 +62,17 @@ class NonlocalConservedRK4(SecondOrderRK4[RealField2D], MinimizerMixin):
             k_regularizer: tg.FloatLike=0.1, 
             inertia: tg.FloatLike=100):
 
-        super().__init__(field, dt)
+        super().__init__(field, dt, 
+                         k_regularizer=k_regularizer, inertia=inertia)
         self.init_pfc_variables(eps)
-
-        self.R = k_regularizer
-        self.inertia = inertia
-
         self.initialize_fft()
 
-        self._deriv = RealField2D(
-                field.lx, field.ly, field.nx, field.ny,
-                precision=field.precision)
-
-        self._deriv.initialize_fft()
-
-    def psi_dot(self) -> Tuple[npt.NDArray, npt.NDArray]:
-        self._deriv.psi[...] = -self.fef.derivative(self.grid_tmp)
-        self._deriv.fft()
-        self._deriv.psi_k[...] *= np.exp(-self.R*self._deriv.k2)
-        self._deriv.ifft()
-        F = self._deriv.psi - np.mean(self._deriv.psi)
-        return self.dgrid_tmp.psi*self.inertia, -(self.dgrid_tmp.psi - F)
+    def derivative(self, f: RealField2D) -> npt.NDArray:
+        return self.fef.derivative(f)
 
     def start(self) -> None:
         super().start()
         self.data['minimizer'] = 'nonlocal-rk4'
-        self.data['M'] = self.inertia
-        self.data['R'] = self.R
 
 
 class NonlocalConservedRK4Plain(FirstOrderRK4[RealField2D], MinimizerMixin):
