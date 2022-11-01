@@ -28,11 +28,12 @@ Minimizers
 =======
 The package provides three main means of minimizing/evolving a PFC system:
 
-* Constant chemical potential - The grand potential = free energy - (chemical potential) * (mean density) 
-                                | is minimized with fixed chemical potential
+* **Constant chemical potential** - The grand potential = free energy
+  -(chemical potential) \* (mean density) is minimized with fixed chemical
+  potential
 
-* Stress relaxer - The grand potential **density** is minimized with respect to the density field and system size
+* **Stress relaxer** - The grand potential **density** is minimized with respect to the density field and system size
 
-* Conserved dynamics - The free energy is minimized with fixed mean density
+* **Conserved dynamics** - The free energy is minimized with fixed mean density
 
 
