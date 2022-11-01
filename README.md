@@ -24,8 +24,10 @@ which is a 6th-order generalization to the PFC functional
 `pfc_util.toolkit` - Static preminimized solid/liquid profiles & utility
 functions.
 
-Minimizers ======= The package provides three main means of
-minimizing/evolving a PFC system:
+# Minimizers
+
+The package provides three main means of minimizing/evolving a PFC
+system:
 
 -   **Constant chemical potential** - The grand potential
     $\Omega = F - \mu \int d\mathbf{r} \psi$ is minimized with fixed

@@ -25,13 +25,13 @@ Modules
 
 
 Minimizers
-=======
+============
 The package provides three main means of minimizing/evolving a PFC system:
 
-* **Constant chemical potential** - The grand potential :math:`\Omega = F - \mu \int d\mathbf{r} \psi` is minimized with fixed :math:`\mu`
+* **Constant chemical potential** - The grand potential :math:`\Omega \equiv F - \mu \int d\mathbf{r} \psi` is minimized with fixed :math:`\mu`
 
-* **Stress relaxer** - The grand potential **density** is minimized with respect to the density field and system size
+* **Stress relaxer** - The grand potential **density** :math:`\omega \equiv \Omega / V` is minimized with respect to the density field and system size with fixed :math:`\mu`
 
-* **Conserved dynamics** - The free energy is minimized with fixed mean density
+* **Conserved dynamics** - The free energy :math:`F` is minimized with fixed :math:`\bar\psi`
 
 
