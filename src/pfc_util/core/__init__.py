@@ -1,7 +1,8 @@
+
 from .base import FreeEnergyFunctional, StateFunction, FreeEnergyFunctionalBase
+from .abc import FreeEnergyFunctionalBase, StateFunctionBase, FieldStateFunction2D
 
 from .evolution import *
 
-from .abc import FreeEnergyFunctionalBase, StateFunctionBase, FieldStateFunction2D
 
 from .version import __version__
