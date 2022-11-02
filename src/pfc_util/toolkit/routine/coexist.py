@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, List, TypedDict
+from typing import Literal, Optional, List, TypedDict
 import torusgrid as tg
 import numpy as np
 from torusgrid.dynamics import Evolver, EvolverHooks, FieldEvolver
@@ -42,7 +42,9 @@ def find_coexistent_mu(
     precision: tg.FloatLike=0.,
 
     verbose: bool = True,
-    liquid_tol: tg.FloatLike = 1e-4
+    liquid_tol: tg.FloatLike = 1e-4,
+
+    search_method: Literal['binary', 'interpolate'] = 'binary'
 ):
     """
     Given: 
@@ -55,7 +57,7 @@ def find_coexistent_mu(
             Omega[solid] = Omega[liquid]
     <=>  F[solid] - mu * N_s = F[liquid] - mu * N_l
 
-    via binary search. 
+    via binary search or linear interpolation.
     """
 
     dtype = tg.get_real_dtype(solid_field.precision)
@@ -63,7 +65,7 @@ def find_coexistent_mu(
     mu_min = dtype(mu_min)
     mu_max = dtype(mu_max)
 
-    digits = round(-np.log10(precision+1e-22) + 2)
+    digits = round(-np.log10(precision+1e-22))
 
     if mu_min >= mu_max:
         raise ValueError('mu_min must be smaller than mu_max')
@@ -71,7 +73,11 @@ def find_coexistent_mu(
     if max_iters is None and precision == 0.:
         raise ValueError('binary search will not stop with max_iters=None and precision=0') 
 
+    if search_method not in ['binary', 'interpolate']:
+        raise ValueError(f'Invalid search method: {search_method}')
+
     if max_iters is None: max_iters = 2**32
+
 
     sol = solid_field
     liq = tg.const_like(solid_field)
@@ -89,16 +95,41 @@ def find_coexistent_mu(
    
     console = rich.get_console()
 
-    for _ in range(max_iters): # type: ignore
-        if np.abs(mu_max - mu_min) <= precision * (mu_max+mu_min)/2:
+    for iter in range(max_iters): # type: ignore
+
+        if np.abs(mu_max - mu_min) <= precision * (np.abs(mu_max)+np.abs(mu_min))/2:
             break
 
-        mu = (mu_min + mu_max) / 2
+        if search_method == 'binary':
+            mu = (mu_min + mu_max) / 2
+        
+        else: # interpolate
+            if iter > 2:
+                mu1 = rec['mu'][-1]
+                omega_l_1 = rec['omega_l'][-1]
+                omega_s_1 = rec['omega_s'][-1]
+
+                delta_omega_1 = omega_s_1 - omega_l_1
+
+                mu2 = rec['mu'][-2]
+                omega_l_2 = rec['omega_l'][-2]
+                omega_s_2 = rec['omega_s'][-2]
+                delta_omega_2 = omega_s_2 - omega_l_2
+
+                mu = (-mu1 * delta_omega_2 + mu2 * delta_omega_1) / (delta_omega_1 - delta_omega_2)
+
+                if verbose:
+                    console.log(f'Computed mu: {mu2}, {mu1} -> {mu}')
+
+            else:
+                mu = (mu_min + mu_max) / 2
+
         if verbose:
             console.rule()
-            mu_min_str = tg.highlight_last_digits(tg.float_fmt(mu_min, digits), 2, 'red')
-            mu_max_str = tg.highlight_last_digits(tg.float_fmt(mu_max, digits), 2, 'red')
-            console.log(f'current mu bounds: {mu_min_str} ~ {mu_max_str}')
+            if search_method == 'binary':
+                mu_min_str = tg.highlight_last_digits(tg.float_fmt(mu_min, digits), 2, 'red')
+                mu_max_str = tg.highlight_last_digits(tg.float_fmt(mu_max, digits), 2, 'red')
+                console.log(f'current mu bounds: {mu_min_str} ~ {mu_max_str}')
 
         '''relax solid and resize liquid accordingly'''
         relaxer = relaxer_supplier(sol, mu)

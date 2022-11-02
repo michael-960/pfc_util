@@ -1,1 +1,1 @@
-from .coexist import find_coexistent_mu
+from .coexist import find_coexistent_mu, MuSearchRecord
