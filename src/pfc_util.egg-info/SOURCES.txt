@@ -38,7 +38,7 @@ src/pfc_util/legacy/profile_prompt/editor_prompt.py
 src/pfc_util/legacy/profile_prompt/prompt.py
 src/pfc_util/toolkit/__init__.py
 src/pfc_util/toolkit/ortho_lattice_generator.py
-src/pfc_util/toolkit/profile_editor.py
+src/pfc_util/toolkit/rotated.py
 src/pfc_util/toolkit/static.py
 src/pfc_util/toolkit/_res/__init__.py
 src/pfc_util/toolkit/_res/uc_eps0.01.field
