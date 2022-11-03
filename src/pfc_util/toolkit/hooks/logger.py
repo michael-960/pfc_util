@@ -18,8 +18,8 @@ def get_pfc_hooks(*,
     display_params: List[str] = ['Lx', 'Ly', 'psibar', 'f', 'F', 'omega', 'Omega'],
     refresh_interval: int = 8,
 
-    detect_slow: Optional[Tuple[str,tg.FloatLike,int]] = ('psibar', 1e-17, 1000)
-
+    detect_slow: Optional[Tuple[str,tg.FloatLike,int]] = ('psibar', 1e-17, 1000),
+    fps: int = 4
     ) -> tg.dynamics.EvolverHooks[tg.dynamics.FieldEvolver[tg.RealField2D]]:
     """
     A convenience factor function.
@@ -27,11 +27,14 @@ def get_pfc_hooks(*,
     """
 
     def float_fmt(x: tg.FloatLike, digits=None):
-        if digits is None:
-            digits = display_digits
-        s = tg.highlight_last_digits(
-                tg.float_fmt(x, digits),
-                extra_display_digits, highlight=extra_digits_color)
+        try:
+            if digits is None:
+                digits = display_digits
+            s = tg.highlight_last_digits(
+                    tg.float_fmt(x, digits),
+                    extra_display_digits, highlight=extra_digits_color)
+        except ValueError:
+            s = repr(x)
         return s
 
     def get_title(data: Dict[str,Any]) -> str:
@@ -51,7 +54,7 @@ def get_pfc_hooks(*,
         sf = state_function_cls.from_field(evolver.field, **environment)
         return sf.data
 
-    hooks = (  tg.dynamics.Display()
+    hooks = (  tg.dynamics.Display(fps=fps)
 
              + tg.dynamics.Panel(title=get_title)
 
