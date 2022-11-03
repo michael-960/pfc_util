@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Tuple, final
+from typing import Optional, Tuple, final
 import numpy as np
 
 from torusgrid.fields import RealField2D
@@ -92,4 +92,20 @@ class NonlocalConservedRK4Base(SecondOrderRK4[RealField2D]):
         self.data['M'] = self.inertia
         self.data['R'] = self.R
 
+
+    def initialize_fft(self, *, reinit: bool = True,
+                       threads: int = 1,
+                       planning_timelimit: Optional[float] = None,
+                       effort: Optional[tg.FFTWEffort] = None,
+                       wisdom_only: bool = False,
+                       destroy_input: bool = False,
+                       unaligned: bool = False):
+
+        self._deriv.initialize_fft(
+                threads=threads,
+                planning_timelimit=planning_timelimit,
+                effort=effort, wisdom_only=wisdom_only,
+                destroy_input=destroy_input, unaligned=unaligned
+
+        )
 

@@ -77,8 +77,10 @@ src/pfc_util/toolkit/hooks/__init__.py
 src/pfc_util/toolkit/hooks/logger.py
 src/pfc_util/toolkit/routine/__init__.py
 src/pfc_util/toolkit/routine/base.py
-src/pfc_util/toolkit/routine/coexist.py
 src/pfc_util/toolkit/routine/interface.py
+src/pfc_util/toolkit/routine/coexist/__init__.py
+src/pfc_util/toolkit/routine/coexist/base.py
+src/pfc_util/toolkit/routine/coexist/main.py
 src/pfc_util/utils/__init__.py
 src/pfc_util/utils/fft.py
 src/pfc_util/utils/misc.py
