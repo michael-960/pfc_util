@@ -50,6 +50,7 @@ def evolve_and_elongate_interface(
         console.log('elongating interface')
 
     left = tg.crop(ifc, 0, 0, ifc.nx//2)
+
     right = tg.crop(ifc, 0, ifc.nx//2, ifc.nx)
 
     ifc_elongated = tg.concat(

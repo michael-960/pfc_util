@@ -71,6 +71,7 @@ class NonlocalConservedRK4Base(SecondOrderRK4[RealField2D]):
                 precision=field.precision)
 
         self._deriv.initialize_fft()
+        self.grid_tmp.initialize_fft()
 
     @final
     def psi_dot(self) -> Tuple[npt.NDArray, npt.NDArray]:
@@ -100,19 +101,16 @@ class NonlocalConservedRK4Base(SecondOrderRK4[RealField2D]):
                        wisdom_only: bool = False,
                        destroy_input: bool = False,
                        unaligned: bool = False):
-        super().initialize_fft(
-            reinit=reinit,
+
+        kwargs = dict(
             threads=threads,
             planning_timelimit=planning_timelimit,
             effort=effort, wisdom_only=wisdom_only,
             destroy_input=destroy_input, unaligned=unaligned
         )
 
-        self._deriv.initialize_fft(
-            threads=threads,
-            planning_timelimit=planning_timelimit,
-            effort=effort, wisdom_only=wisdom_only,
-            destroy_input=destroy_input, unaligned=unaligned
+        super().initialize_fft(reinit=reinit, **kwargs)
+        self._deriv.initialize_fft(**kwargs)
+        self.grid_tmp.initialize_fft(**kwargs)
 
-        )
 
