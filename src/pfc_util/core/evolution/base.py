@@ -100,12 +100,19 @@ class NonlocalConservedRK4Base(SecondOrderRK4[RealField2D]):
                        wisdom_only: bool = False,
                        destroy_input: bool = False,
                        unaligned: bool = False):
+        super().initialize_fft(
+            reinit=reinit,
+            threads=threads,
+            planning_timelimit=planning_timelimit,
+            effort=effort, wisdom_only=wisdom_only,
+            destroy_input=destroy_input, unaligned=unaligned
+        )
 
         self._deriv.initialize_fft(
-                threads=threads,
-                planning_timelimit=planning_timelimit,
-                effort=effort, wisdom_only=wisdom_only,
-                destroy_input=destroy_input, unaligned=unaligned
+            threads=threads,
+            planning_timelimit=planning_timelimit,
+            effort=effort, wisdom_only=wisdom_only,
+            destroy_input=destroy_input, unaligned=unaligned
 
         )
 
