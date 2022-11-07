@@ -6,6 +6,36 @@ from torusgrid.dynamics import EvolverHooks, FieldEvolver
 from .base import MinimizerSupplier
 
 
+def elongate_interface(
+    ifc: tg.RealField2D, 
+    delta_sol: tg.RealField2D, 
+    delta_liq: tg.RealField2D,
+):
+    """
+    Elongate the interface with delta_sol and delta_liq
+    
+        IIII -> LIISSIIL
+
+    where
+
+        IIII: original interface
+        S: delta_sol
+        L: delta_liq
+
+    """
+
+    left = tg.crop(ifc, 0, 0, ifc.nx//2)
+
+    right = tg.crop(ifc, 0, ifc.nx//2, ifc.nx)
+
+    ifc_elongated = tg.concat(
+        delta_liq, left, delta_sol, delta_sol, right, delta_liq,
+        axis=0)
+
+    return ifc_elongated
+
+
+
 def evolve_and_elongate_interface(
     ifc: tg.RealField2D, 
     delta_sol: tg.RealField2D, 
@@ -17,7 +47,7 @@ def evolve_and_elongate_interface(
             EvolverHooks[FieldEvolver[tg.RealField2D]]
            ]=None,
 
-    verbose=False
+    verbose: bool = False
 ) -> tg.RealField2D:
     """
 
@@ -49,13 +79,7 @@ def evolve_and_elongate_interface(
     if verbose:
         console.log('elongating interface')
 
-    left = tg.crop(ifc, 0, 0, ifc.nx//2)
-
-    right = tg.crop(ifc, 0, ifc.nx//2, ifc.nx)
-
-    ifc_elongated = tg.concat(
-        delta_liq, left, delta_sol, delta_sol, right, delta_liq,
-        axis=0)
+    ifc_elongated = elongate_interface(ifc, delta_sol, delta_liq)
 
     if verbose:
         console.log(f'Lx={ifc_elongated.lx}, Ly={ifc_elongated.ly}')
