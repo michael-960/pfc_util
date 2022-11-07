@@ -123,6 +123,7 @@ def find_coexistent_mu(
 
         if mu_rec.zero is not None:
             console.log(f'omega_l and omega_s are numerically indistinguishable under the current floating point precision')
+            break
 
     if verbose:
         console.rule()
