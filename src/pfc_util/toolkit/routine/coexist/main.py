@@ -11,7 +11,7 @@ from ....core import FreeEnergyFunctionalBase
 from ....utils import is_liquid
 
 from ..base import MuMinimizerSupplier
-from .base import MuSearchRecord
+from .base import MuSearchRecord, LiquefiedError
 
 
 
@@ -34,7 +34,10 @@ def find_coexistent_mu(
     verbose: bool = True,
     liquid_tol: tg.FloatLike = 1e-4,
 
-    search_method: Literal['binary', 'interpolate'] = 'binary'
+    search_method: Literal['binary', 'interpolate'] = 'binary',
+
+    error_if_liquefied: bool = False
+
 ):
     """
     Given: 
@@ -67,7 +70,6 @@ def find_coexistent_mu(
         raise ValueError(f'Invalid search method: {search_method}')
 
     if max_iters is None: max_iters = int(2**32-1)
-
 
     sol = solid_field
     liq = tg.const_like(solid_field)
@@ -103,8 +105,13 @@ def find_coexistent_mu(
         omega_s = fef.mean_free_energy_density(sol) - mu*sol.psi.mean()
 
         if is_liquid(sol.psi, tol=liquid_tol):
+            s = f'solid field has been liquefied during minimization with mu={mu}'
             if verbose:
-                console.log(f'solid field was liquefied during minimization with mu={mu}')
+                console.log(s)
+
+            if error_if_liquefied:
+                raise LiquefiedError(mu_rec, mu)
+            
             break
 
         '''evolve liquid under constant mu'''
@@ -129,12 +136,14 @@ def find_coexistent_mu(
         console.rule()
         console.log('Summary:')
         mu_min_str = tg.highlight_last_digits(tg.float_fmt(mu_rec.lower_bound, digits), 2, 'red')
-        mu_max_str = tg.highlight_last_digits(tg.float_fmt(mu_rec.lower_bound, digits), 2, 'red')
-        final_mu_str = tg.highlight_last_digits(tg.float_fmt(mu_rec.mu[-1], digits), 2, 'red')
+        mu_max_str = tg.highlight_last_digits(tg.float_fmt(mu_rec.upper_bound, digits), 2, 'red')
 
         console.log(f'mu min   = {mu_min_str}')
         console.log(f'mu max   = {mu_max_str}')
-        console.log(f'final mu = {final_mu_str}')
+
+        if len(mu_rec.mu) >= 1:
+            final_mu_str = tg.highlight_last_digits(tg.float_fmt(mu_rec.mu[-1], digits), 2, 'red')
+            console.log(f'final mu = {final_mu_str}')
 
     return mu_rec
 

@@ -228,4 +228,10 @@ class MuSearchRecord(ZeroSearchRecord):
             return self.upper_bound
 
 
+class LiquefiedError(Exception):
+    def __init__(self, mu_rec: MuSearchRecord, mu: tg.FloatLike):
+        super().__init__(f'solid field has been liquefied during minimization with mu={mu}')
+        self.mu_rec = mu_rec
+        self.mu = mu
+
 
