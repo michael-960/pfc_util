@@ -11,16 +11,30 @@ from .base import MinimizerMixin, MuMinimizerMixin
 
 
 class ConstantMuMinimizer(
-        SplitStep[tg.RealField2D], 
-        MinimizerMixin,
-        MuMinimizerMixin):
-    """
+    SplitStep[tg.RealField2D], 
+    MinimizerMixin,
+    MuMinimizerMixin):
+    r"""
     PFC constant chemical potential minimizer with split-step FFT
+
+    Evolution equation:
+
+        .. math::
+
+            \dot\psi = -\frac{\delta\Omega}{\delta\psi} = \mu - \frac{\delta F}{\delta t}
+        
     """
     def __init__(self, 
             field: tg.RealField2D, 
             dt: tg.FloatLike, eps: tg.FloatLike, mu: tg.FloatLike
         ):
+        r"""
+        :param field: the PFC field to be minimized
+        :param dt: time step
+        :param eps: PFC :math:`\epsilon`
+        :param mu: chemical potential :math:`\mu`
+
+        """
 
         super().__init__(field, dt)
         self.init_pfc_variables(eps)

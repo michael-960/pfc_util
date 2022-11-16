@@ -1,11 +1,9 @@
 from __future__ import annotations
-from abc import ABC, abstractmethod
 import numpy as np
 
 from ..utils.fft import rfft2, irfft2 
 
-from typing import Dict, Generic, List, Optional, Tuple, TypeVar, final
-from typing_extensions import Self
+from typing import Dict, List, Optional, Tuple, final
 
 import torusgrid as tg
 
@@ -13,15 +11,23 @@ import torusgrid as tg
 
 import numpy.typing as npt
 
-from .abc import FieldStateFunction2D, FreeEnergyFunctionalBase, StateFunctionBase
+from .abc import FieldStateFunction2D, FreeEnergyFunctionalBase
 
 
 
 class FreeEnergyFunctional(FreeEnergyFunctionalBase[tg.RealField2D]):
-    """
+    r"""
     PFC free energy fuctional
+
+    .. math::
+
+        F = \int d\mathbf{r}\left\{\frac{1}{2}\psi[-\epsilon + (1+\nabla^2)^2]\psi + \frac{\psi^4}{4}\right\}
+
     """
     def __init__(self, eps: tg.FloatLike):
+        r"""
+        :param eps: PFC :math:`\epsilon`
+        """
         self.eps = eps
 
     def free_energy_density(self, field: tg.RealField2D) -> npt.NDArray[np.floating]:

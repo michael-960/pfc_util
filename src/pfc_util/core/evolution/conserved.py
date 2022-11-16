@@ -51,16 +51,33 @@ class NonlocalConservedMinimizer(TemporalEvolver[RealField2D], MinimizerMixin):
         self.data['minimizer'] = 'nonlocal'
 
 
-# class NonlocalConservedRK4(SecondOrderRK4[RealField2D], MinimizerMixin):
 class NonlocalConservedRK4(NonlocalConservedRK4Base, MinimizerMixin):
-    """
+    r"""
     RK4 nonlocal conserved dynamics with inertia
+
+    The evolution equations are
+
+        .. math::
+
+            \dot\psi = M \phi
+
+        .. math::
+
+            \dot\phi = - \left(\phi + \frac{\delta F}{\delta \psi}\Big\vert_{k\neq 0}\right)
+
     """
     def __init__(self, 
             field: RealField2D, 
             dt: tg.FloatLike, eps: tg.FloatLike, *,
             k_regularizer: tg.FloatLike=0.1, 
             inertia: tg.FloatLike=100):
+        """
+        :param field: the PFC field to be minimized
+        :param dt: time step
+        :param eps: PFC epsilon
+        :param k_regularizer: k-space regulator to suppress high frequency modes from blowing up
+        :param inertia: coefficient of 1st time derivative
+        """
 
         super().__init__(field, dt, 
                          k_regularizer=k_regularizer, inertia=inertia)
@@ -149,5 +166,6 @@ class NonlocalDescent(TemporalEvolver[RealField2D], MinimizerMixin):
         super().start()
         self.data['minimizer'] = 'nonlocal-desc'
         self.data['R'] = self.R
+
 
 

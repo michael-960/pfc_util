@@ -8,9 +8,10 @@ Welcome to pfc-util's documentation!
 
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
-   api
 
+   intro
+   start
+   api
 
 
 Indices and tables
