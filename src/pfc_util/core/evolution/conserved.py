@@ -1,9 +1,8 @@
 from __future__ import annotations
-from typing import Tuple, final
 import numpy as np
 
 from torusgrid.fields import RealField2D
-from torusgrid.dynamics import SecondOrderRK4, FirstOrderRK4, TemporalEvolver
+from torusgrid.dynamics import FirstOrderRK4, TemporalEvolver
 import torusgrid as tg
 
 
