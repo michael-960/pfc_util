@@ -19,6 +19,7 @@ class StressRelaxer(
     Constant chemical potential stress relaxer
 
         Equations of motion:
+
         .. math::
 
             \dot\psi = -\frac{\delta\Omega}{\delta\psi}
@@ -26,6 +27,9 @@ class StressRelaxer(
         .. math::
 
             \dot L_x = -\eta V\frac{\partial\omega}{\partial L_x}
+
+        .. math::
+
             \dot L_y = -\eta V\frac{\partial\omega}{\partial L_y}
             
     """

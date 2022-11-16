@@ -77,18 +77,48 @@ class StressRelaxer_(core.StressRelaxerBase, MinimizerMixin, core.MuMinimizerMix
 
 @final
 class StressRelaxer(
-        core.StressRelaxerBase,
-        MinimizerMixin,
-        core.MuMinimizerMixin):
+    core.StressRelaxerBase,
+    MinimizerMixin,
+    core.MuMinimizerMixin
+):
+    r"""
+    PFC6 constant chemical potential stress relaxer
+
+        Equations of motion:
+
+        .. math::
+
+            \dot\psi = -\frac{\delta\Omega}{\delta\psi}
+
+        .. math::
+
+            \dot L_x = -\eta V\frac{\partial\omega}{\partial L_x}
+
+        .. math::
+
+            \dot L_y = -\eta V\frac{\partial\omega}{\partial L_y}
+
     """
-    PFC6 stress relaxer
-    """
+
     def __init__(self, 
-            field: RealField2D,
-            dt: FloatLike,
-            eps: FloatLike, alpha: FloatLike, beta: FloatLike,
-            mu: FloatLike, *,
-            expansion_rate: float=1., resize_cycle: int=31):
+        field: RealField2D,
+        dt: FloatLike,
+        eps: FloatLike, alpha: FloatLike, beta: FloatLike,
+        mu: FloatLike, *,
+        expansion_rate: float=1., resize_cycle: int=31
+    ):
+
+        r"""
+        :param field: the PFC field to be minimized
+        :param dt: time step
+        :param eps: PFC :math:`\epsilon`
+        :param alpha: PFC6 :math:`\alpha`
+        :param beta: PFC6 :math:`\beta`
+        :param mu: chemical potential :math:`\mu`
+        :param expansion_rate: coefficient parametrizing the speed of expansion (:math:`\eta`)
+        :param resize_cycle: period (in number of time steps) of field resizing
+        """
+
 
         super().__init__(field, dt, expansion_rate=expansion_rate, resize_cycle=resize_cycle)
         self.init_pfc6_variables(eps, alpha, beta)

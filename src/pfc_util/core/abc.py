@@ -32,22 +32,40 @@ class FreeEnergyFunctionalBase(ABC, Generic[T]):
 
     @abstractmethod
     def free_energy_density(self, field: T) -> npt.NDArray[np.floating]:
+        r"""
+        :return: :math:`f[\psi]`
+        """
         raise NotImplementedError()
 
     def free_energy(self, field: T) -> np.floating:
+        r"""
+        :return: :math:`F[\psi] \equiv \int d\mathbf{r} f[\psi]`
+        """
         return np.sum(self.free_energy_density(field)) * field.dv
 
     def mean_free_energy_density(self, field: T) -> np.floating:
+        r"""
+        :return: :math:`F[\psi] / V`
+        """
         return np.mean(self.free_energy_density(field))
 
     def grand_potential_density(self, field: T, mu: tg.FloatLike) -> npt.NDArray[np.floating]:
+        r"""
+        :return: :math:`\omega[\psi] \equiv f[\psi] - \mu \psi`
+        """
         return self.free_energy_density(field) - mu * field.psi
 
     def grand_potential(self, field: T, mu: tg.FloatLike) -> np.floating:
+        r"""
+        :return: :math:`\Omega[\psi] \equiv \int d\mathbf{r} \omega[\psi]`
+        """
         return np.sum(self.grand_potential_density(field, mu)) * field.dv
 
     def mean_grand_potential_density(self, field: T, mu: tg.FloatLike) -> np.floating:
-      return np.mean(self.grand_potential_density(field, mu))
+        r"""
+        :return: :math:`\Omega[\psi] / V`
+        """
+        return np.mean(self.grand_potential_density(field, mu))
 
 
 T_Any = TypeVar('T_Any')
