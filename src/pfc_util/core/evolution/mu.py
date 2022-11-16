@@ -64,3 +64,4 @@ class ConstantMuMinimizer(
     def start(self) -> None:
         super().start()
         self.data['minimizer'] = 'mu'
+

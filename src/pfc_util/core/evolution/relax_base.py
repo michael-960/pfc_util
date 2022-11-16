@@ -177,11 +177,11 @@ class StressRelaxerBase(SplitStep[tg.RealField2D]):
             psi_k_sq: npt.NDArray[np.float_],
             kernel: npt.NDArray[np.float_]
         ) -> npt.NDArray[np.float_]:
-        """
-        Given |psi_k^2| 
-        where psi_k (Nx, Ny/2+1)
-        is the real Fourier transform of real field psi (Nx, Ny), calculate
-        the inner product <psi K psi> where K = kernel.
+        r"""
+        Given :math:`|\psi_k^2|`
+        where :math:`\psi_k \; (Nx, Ny/2+1)`
+        is the real Fourier transform of real field :math:`\psi \; (Nx, Ny)`, calculate
+        the inner product :math:`\braket{\psi K \psi}` where K = kernel.
 
         The kernel K is given as an array of shape (Nx, Ny/2+1) in the k space.
         """
