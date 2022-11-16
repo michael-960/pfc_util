@@ -1,6 +1,0 @@
-numpy>=1.21.2
-scipy>=1.7
-pyfftw>=0.12
-matplotlib>=3.5.1
-torusgrid>=0.4.7
-rich>=12.4.0
