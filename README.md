@@ -4,6 +4,11 @@ created by michael in 2022/04
 
 pfc_util is a python package for PFC (phase field crystal) simulations.
 
+# Documentation
+
+Documentation is available on
+[pfc-util.readthedocs.io](pfc-util.readthedocs.io) .
+
 # Dependencies
 
 -   numpy
@@ -78,7 +83,7 @@ pfc.ConstantMuMinimizer(solid, dt=0.001, eps=0.05, mu=0.08).run(
             + tg.dynamics.Text('psibar={psibar:.8f}')
             + tg.dynamics.DetectSlow(
                 'psibar', rtol=1e-9, atol=0, period=8, patience=200
-            ) # make the minizer stop if psibar varies sufficiently slowly
+            ) # make the minimizer stop if psibar varies sufficiently slowly
         )
     )
 
