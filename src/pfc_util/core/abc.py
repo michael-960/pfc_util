@@ -1,17 +1,20 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from typing_extensions import Self
 import numpy as np
 
 
 
-from typing import Dict, Generic, List, Optional, Tuple, TypeVar
+from typing import TYPE_CHECKING, Dict, Generic, List, Optional, Tuple, TypeVar
 
 import torusgrid as tg
 
 import torusgrid as tg
 
 import numpy.typing as npt
+
+
+if TYPE_CHECKING:
+    from typing_extensions import Self
 
 
 
