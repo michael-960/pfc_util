@@ -52,9 +52,14 @@ _liq_path_map = {
     '0.5': 'uc_eps0.5_liq.field'
 }
 
+
 def get_unit_cell(eps: str, liquid=False) -> RealField2D:
-    """
+    r"""
     Retrieve a relaxed and minimized solid/liquid unit cell
+
+    :param eps: PFC :math:`\epsilon`, specified with a string
+    :param liquid: If :code:`True`, the liquid profile will be returned
+
     """
     if not type(eps) is str:
         raise ValueError(f'eps should be specified as a string, not {type(eps)}')

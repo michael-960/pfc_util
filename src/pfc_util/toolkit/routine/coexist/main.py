@@ -39,18 +39,38 @@ def find_coexistent_mu(
     error_if_liquefied: bool = False
 
 ):
-    """
+    r"""
     Given: 
-        - a solid profile 
+        - a solid profile :math:`\psi_s(\mathbf{r})` 
         - minimum and maximum values of chemical potential
         - a free energy functional,
 
     find the chemical potential that satisfies:
 
-            Omega[solid] = Omega[liquid]
-    <=>  F[solid] - mu * N_s = F[liquid] - mu * N_l
+        .. math::
+
+            \Omega[\psi_s] = \Omega[\psi_l]
+
+        .. math::
+
+           \iff F[\psi_s] - \mu \int d\mathbf{r}\psi_s = F[\psi_l] -  \mu V\psi_l
 
     via binary search or linear interpolation.
+
+    :param solid_field: :math:`\psi_s`
+    :param mu_min: initial `\mu` lower bound
+    :param mu_max: initial `\mu` upper bound
+
+    :param fef: A free energy functional object (instance of :code:`pfc_util.FreeEnergyFunctionalBase`)
+
+    :param relaxer_supplier: A function that returns a relaxer given a field and :math:`\mu`
+
+    :param const_mu_supplier: A function that returns a constant :math:`\mu` minimizer given a field and :math:`\mu`
+
+    :param max_iters: Maximum number of iterations
+
+    :param precision: The relative tolerance of :math:`\mu`
+
     """
 
     dtype = tg.get_real_dtype(solid_field.precision)

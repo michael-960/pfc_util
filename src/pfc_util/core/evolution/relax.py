@@ -67,6 +67,9 @@ class StressRelaxer(
         self._kernel = 1-2*self.K2+self.K4 - self.eps
 
     def get_realspace_steps(self) -> List[Callable[[float], None]]:
+        """
+        Return a list of steps to be run during :code:`step()`
+        """
         f = self.field
         def step_mu(dt: float):
             f.psi[...] += dt * self.mu

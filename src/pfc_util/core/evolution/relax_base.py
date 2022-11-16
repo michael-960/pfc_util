@@ -10,29 +10,28 @@ from torusgrid.dynamics import SplitStep, Step
 
 
 class StressRelaxerBase(SplitStep[tg.RealField2D]):
-    """
+    r"""
     Abstract base class for stress relaxers.
 
-    This minimizer follows the following procedure to find the field values
-        and size that minimizes the mean free energy **density**:
+    This minimizer follows the following procedure to find the field values and
+    size that minimizes the mean grand potential **density**:
             
-            x scale, y scale = (1, 1)
-            Lx, Ly = field.Lx, field.Ly
+        1. x scale, y scale = (1, 1)
+        2. Lx, Ly = field.Lx, field.Ly
 
-            {
-                [
-                    - update field values & x, y scales by dt
-                ] (repeat Q times)
+        3. update field values & x, y scales by dt :math:`Q>=1` times
+        4. (resize) field.Lx, field.Ly \*= scales
+        5. x scale, y scale = (1, 1)
 
-                - field.Lx, field.Ly *= scales
-                - x, y scales = (1, 1)
-            } (repeat)
+        6. repeat 3,4,5
 
     Subclasses must implement: 
+
         - get_realspace_steps()
         - step_kernel()
         - on_size_changed()
         - update_domega_kernels()
+
     """
     def __init__(self, 
             field: tg.RealField2D, 

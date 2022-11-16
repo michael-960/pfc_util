@@ -9,7 +9,8 @@ console = rich.get_console()
 
 
 class ZeroSearchRecord:
-    """
+    r"""
+
     This interface handles the search of a zero of a **monotonically increasing
     function** that is expensive to evaluate on a given interval.
 
@@ -27,6 +28,11 @@ class ZeroSearchRecord:
             initial_range: Optional[Tuple[tg.FloatLike, tg.FloatLike]]=None,
             search_method: Literal['binary', 'interpolate']='binary'
         ) -> None:
+        """
+        :param initial_range: initial upper and lower bounds
+        :param search_method: can be either :code:`binary` or :code:`interpolate`
+        """
+
         self._x: List[tg.FloatLike] = []
         self._y: List[tg.FloatLike] = []
 
@@ -48,14 +54,18 @@ class ZeroSearchRecord:
     @property
     def upper_bound(self):
         """
+
         Upper bound of zero
+
         """
         return self._upper[-1]
 
     @property
     def lower_bound(self):
         """
+
         Lower bound of zero
+
         """
         return self._lower[-1]
 
@@ -106,14 +116,12 @@ class ZeroSearchRecord:
             x1: tg.FloatLike, x2: tg.FloatLike, *, 
             rtol: tg.FloatLike=0):
         """
-        Parameters: 
-            a, b: record indices
+        :param x1,x2: previously evaluated :math:`x` values
 
-        Return:
-            The x coordinate the intersection betwee the x axis and
-            the line passing through (x[a], f(x[a])) and (x[b], f(x[b])).
+        :return: The x coordinate the intersection betwee the x axis and
+                the line passing through (x1, f(x1)) and (x2, f(x2)).
 
-            If f(x[a]) and f(x[b]) is too close (w.r.t. rtol), a ValueError is raised
+        :raises ValueError: If f(x1) and f(x2) is too close (w.r.t. rtol), a ValueError is raised
         """
 
         y1 = self.record[x1]
@@ -124,7 +132,7 @@ class ZeroSearchRecord:
         return (y1*x2 - y2*x1) / (y1 - y2)
 
     def next(self, verbose: bool = True) -> tg.FloatLike:
-        """
+        r"""
         Return the next point (x) to sample
 
         We want a balance between quick convergence and narrow bounds.
@@ -139,14 +147,14 @@ class ZeroSearchRecord:
         interest, then one iteration results in
 
         Convex:
-            - - -> +
-            - + -> -
-            + + -> +
+            | \- \- |rarr| \+
+            | \- \+ |rarr| \-
+            | \+ \+ |rarr| \+
 
         Concave:
-            - - -> -
-            - + -> +
-            + + -> -
+            | \- \- |rarr| \-
+            | \- \+ |rarr| \+
+            | \+ \+ |rarr| \-
 
         where -/+ means to the left/right of the zero. So if the function is
         concave, for example, one would keep sampling from the left of the zero.
@@ -193,8 +201,17 @@ class ZeroSearchRecord:
 
 
 class MuSearchRecord(ZeroSearchRecord):
-    def __init__(self, *, initial_range: Tuple[tg.FloatLike, tg.FloatLike],
-                 search_method: Literal['binary', 'interpolate'] = 'binary') -> None:
+    r"""
+
+    Container for information acquired during search for :math:`\mu`.
+
+    """
+    def __init__(
+        self, *, 
+         initial_range: Tuple[tg.FloatLike, tg.FloatLike],
+         search_method: Literal['binary', 'interpolate'] = 'binary'
+    ) -> None:
+        
         super().__init__(initial_range=initial_range, search_method=search_method)
         self.omega_l: List[tg.FloatLike] = []
         self.omega_s: List[tg.FloatLike] = []

@@ -37,8 +37,7 @@ def elongate_interface(
 
 
 def evolve_and_elongate_interface(
-    ifc: tg.RealField2D, 
-    delta_sol: tg.RealField2D, 
+    ifc: tg.RealField2D, delta_sol: tg.RealField2D, 
     delta_liq: tg.RealField2D, *,
 
     minimizer_supplier: MinimizerSupplier,
@@ -49,12 +48,14 @@ def evolve_and_elongate_interface(
 
     verbose: bool = False
 ) -> tg.RealField2D:
-    """
+    r"""
 
-    Evolve interface -> 
+    Evolve interface -> elongate interface
 
-    Parameters:
-        ifc, delta_sol, delta_liq: 2D real fields of the same height & vertical shape
+    :param ifc,delta_sol,delta_liq: 2D real fields of the same height & vertical shape
+
+    :param minimizer_supplier: A function that returns a constant :math:`\mu` minimizer given a field and :math:`\mu`
+    
     """
 
     console = rich.get_console()
