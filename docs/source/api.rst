@@ -4,5 +4,5 @@ API Reference
 .. toctree::
     :maxdepth: 2
     
-    api/pfc.rst
-    api/pfc.pfc6.rst
+    api/pfc
+    api/pfc.pfc6

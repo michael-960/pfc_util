@@ -1,15 +1,13 @@
 pfc
 ====
 
-.. autoclass:: pfc_util.ConstantMuMinimizer
-   :members:
-   :inherited-members:
+.. toctree::
+    :maxdepth: 2
+    
+    pfc/mu
+    pfc/conserved
+    pfc/relax
 
-.. autoclass:: pfc_util.NonlocalConservedRK4
-   :members:
-   :inherited-members:
 
-.. autoclass:: pfc_util.StressRelaxer
-   :members:
-   :inherited-members:
+
 
