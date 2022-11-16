@@ -4,6 +4,14 @@ created by michael in 2022/04
 
 pfc_util is a python package for PFC (phase field crystal) simulations.
 
+
+Documentation
+======================
+
+Documentation is available on `<pfc-util.readthedocs.io>`_ .
+
+
+
 Dependencies
 ======================
 * numpy

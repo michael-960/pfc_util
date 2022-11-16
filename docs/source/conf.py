@@ -10,9 +10,9 @@ import sys, os
 sys.path.insert(0, os.path.abspath('../../src/'))
 
 project = 'pfc-util'
-copyright = '2022, MichaelWang'
-author = 'MichaelWang'
-release = '0.4.10'
+copyright = '2022, Michael Wang'
+author = 'Michael Wang'
+release = '0.4.11'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
