@@ -1,4 +1,4 @@
-pfc.pfc6
+pfc6
 ========
 
 .. toctree::
@@ -7,5 +7,4 @@ pfc.pfc6
     pfc6/mu
     pfc6/conserved
     pfc6/relax
-
 
