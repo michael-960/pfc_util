@@ -69,7 +69,7 @@ unit cell to :code:`solid_eps0.05_mu0.08.field`
     solid = pfc.toolkit.get_unit_cell(eps='0.1')
 
 
-    '''Minimize this profile at epsilon = 0.2 and mu = 0.26'''
+    '''Minimize this profile at epsilon = 0.05 and mu = 0.08'''
     pfc.ConstantMuMinimizer(solid, dt=0.001, eps=0.05, mu=0.08).run(
             n_steps=31, # n_steps means the number of evolution steps between hook calls
                         # hooks are invoked to update display, monitor values, etc
