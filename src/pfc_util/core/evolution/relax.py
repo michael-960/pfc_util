@@ -11,17 +11,37 @@ from .relax_base import StressRelaxerBase
 
 
 class StressRelaxer(
-        StressRelaxerBase, 
-        MinimizerMixin,
-        MuMinimizerMixin):
+    StressRelaxerBase, 
+    MinimizerMixin,
+    MuMinimizerMixin
+):
+    r"""
+    Constant chemical potential stress relaxer
+
+        Equations of motion:
+        .. math::
+
+            \dot\psi = -\frac{\delta\Omega}{\delta\psi}
+
+        .. math::
+
+            \dot L_x = -\eta V\frac{\partial\omega}{\partial L_x}
+            \dot L_y = -\eta V\frac{\partial\omega}{\partial L_y}
+            
     """
-    Constant mu stress relaxer
-    """
-    def __init__(self, field: tg.RealField2D, 
+    def __init__(
+            self, field: tg.RealField2D, 
             dt: tg.FloatLike, eps: tg.FloatLike, mu: tg.FloatLike, *,
-            expansion_rate: tg.FloatLike=1., resize_cycle: int = 31):
-
-
+            expansion_rate: tg.FloatLike=1., resize_cycle: int = 31
+    ):
+        r"""
+        :param field: the PFC field to be minimized
+        :param dt: time step
+        :param eps: PFC :math:`\epsilon`
+        :param mu: chemical potential :math:`\mu`
+        :param expansion_rate: coefficient parametrizing the speed of expansion (:math:`\eta`)
+        :param resize_cycle: period (in number of time steps) of field resizing
+        """
         super().__init__(
                 field, dt,
                 expansion_rate=expansion_rate, 

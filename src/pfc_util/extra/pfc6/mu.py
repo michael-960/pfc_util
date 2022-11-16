@@ -34,6 +34,17 @@ class ConstantMuMinimizer(
         tg.dynamics.SplitStep[tg.RealField2D],
         MinimizerMixin,
         core.MuMinimizerMixin):
+    r"""
+    PFC6 constant chemical potential minimizer with split-step FFT
+
+    Evolution equation:
+
+        .. math::
+
+            \dot\psi = -\frac{\delta\Omega}{\delta\psi} = \mu - \frac{\delta F}{\delta t}
+        
+    """
+
 
     def __init__(self, 
             field: RealField2D, 
@@ -42,6 +53,14 @@ class ConstantMuMinimizer(
             alpha: FloatLike, 
             beta: FloatLike,
             mu: FloatLike):
+        r"""
+        :param field: the PFC field to be minimized
+        :param dt: time step
+        :param eps: PFC :math:`\epsilon`
+        :param alpha: PFC6 :math:`\alpha`
+        :param beta: PFC6 :math:`\beta`
+        :param mu: chemical potential :math:`\mu`
+        """
 
         super().__init__(field, dt)
         self.init_pfc6_variables(eps, alpha, beta)

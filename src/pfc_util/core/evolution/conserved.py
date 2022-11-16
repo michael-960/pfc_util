@@ -74,6 +74,7 @@ class NonlocalConservedRK4(NonlocalConservedRK4Base, MinimizerMixin):
         :param field: the PFC field to be minimized
         :param dt: time step
         :param eps: PFC epsilon
+
         :param k_regularizer: k-space regulator to suppress high frequency modes from blowing up
         :param inertia: coefficient of 1st time derivative
         """
