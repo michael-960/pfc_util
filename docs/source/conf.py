@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.abspath('../../src/'))
 project = 'pfc-util'
 copyright = '2022, Michael Wang'
 author = 'Michael Wang'
-release = '0.4.11'
+release = '0.4.12'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
