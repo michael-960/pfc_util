@@ -7,15 +7,23 @@ from ... import core
 
 
 class FreeEnergyFunctional(core.FreeEnergyFunctionalBase[tg.RealField2D]):
-    """
+    r"""
     PFC6 free energy functional
+
+    .. math::
+
+        F = \int d\mathbf{r}
+        \left\{\frac{1}{2}\psi[-\epsilon + (1+\nabla^2)^2 - \alpha(\nabla^2+2\nabla^4+\nabla^6)]\psi 
+               + \frac{\psi^4}{4}
+               + \beta\frac{\psi^6}{6}
+                \right\}
+
     """
     def __init__(self, eps: tg.FloatLike, alpha: tg.FloatLike, beta: tg.FloatLike):
-        """
-        Parameters:
-            eps: PFC epsilon
-            alpha: 6th order derivative coefficient
-            beta: psi^6/6 coefficient
+        r"""
+        :param eps: PFC :math:`\epsilon`
+        :param alpha: PFC6 :math:`\alphla`
+        :param beta: :math:`\beta`
         """
         self.eps = eps
         self.alpha = alpha
