@@ -6,8 +6,7 @@ pfc_util is a python package for PFC (phase field crystal) simulations.
 
 # Documentation
 
-Documentation is available on
-[pfc-util.readthedocs.io](pfc-util.readthedocs.io) .
+Documentation is available on <https://pfc-util.readthedocs.io> .
 
 # Dependencies
 
