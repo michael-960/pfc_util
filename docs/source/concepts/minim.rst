@@ -42,6 +42,6 @@ By default, this would run until manually interrupted (by pressing
     minim.run(31, hooks=hooks)
 
 
-This will execute a callback everytime :code:`n_steps` (31 in this case) time
+This will execute a callback every :code:`n_steps` (31 in this case) time
 steps to monitor the mean density :math:`\bar\psi`, and stop the process
 if it changes too slow.
