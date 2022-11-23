@@ -9,7 +9,7 @@ crystal) simulations.
 
 
 This project is heavily based on `torusgrid
-<https://github.com/michael-960/pfc_util>`_, a python package that mainly deals
+<https://github.com/michael-960/torusgrid>`_, a python package that mainly deals
 with fourier transforms on fixed-size grids or fields. Refer to the
 `documentation <https://torusgrid.readthedocs.io/en/latest/>`_ here.
 
