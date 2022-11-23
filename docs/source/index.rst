@@ -3,14 +3,19 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to pfc-util's documentation!
-====================================
+pfc-util's documentation
+=========================
+
+GitHub: `<https://github.com/michael-960/pfc_util>`_
+
 
 .. toctree::
    :maxdepth: 2
 
    intro
    start
+   concepts
+
    api
 
 
