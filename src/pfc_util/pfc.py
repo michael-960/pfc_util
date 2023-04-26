@@ -17,7 +17,7 @@ import torusgrid as tg
 
 from .core.evolution import ConstantChemicalPotentialMinimizer, NonlocalConservedMinimizer, StressRelaxer, PFCMinimizer
 from .core.base import PFCStateFunction
-from .history import PFCHistory, PFCMinimizerHistoryBlock, PFCEditActionHistoryBlock, import_history
+from .history import PFCHistory, PFCMinimizerHistoryBlock, import_history
 
 warnings.warn('the PFC module is currently unmaintained')
 

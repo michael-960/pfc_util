@@ -186,6 +186,3 @@ class PFC6Relaxer(StressRelaxer):
 __all__ = ['PFCFunctional6', 'PFC6Minimizer']
 
 
-
-
-

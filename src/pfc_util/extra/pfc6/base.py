@@ -65,10 +65,11 @@ class MinimizerMixin(core.MinimizerMixin):
 
     Subclasses should call init_pfc6_variables instead of init_pfc_variables
     """
-    def init_pfc6_variables(self, 
-                            eps: tg.FloatLike,
-                            alpha: tg.FloatLike, beta: tg.FloatLike):
-
+    def init_pfc6_variables(
+        self, 
+        eps: tg.FloatLike,
+        alpha: tg.FloatLike, beta: tg.FloatLike
+    ):
         super().init_pfc_variables(eps)
         self.fef = FreeEnergyFunctional(self.eps, alpha, beta)
         self.alpha = alpha
